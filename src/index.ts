@@ -50,6 +50,7 @@ export default {
     }
 
     if (url.pathname === "/") {
+      if (env.ASSETS) return env.ASSETS.fetch(request);
       return new Response(
         JSON.stringify({
           name: "mahoraga",
@@ -74,7 +75,8 @@ export default {
       return MahoragaMcpAgent.serve("/mcp", { binding: "MCP_AGENT" }).fetch(request, env, ctx);
     }
 
-    if (url.pathname.startsWith("/agent")) {
+    const agentPrefix = url.pathname === "/api" || url.pathname.startsWith("/api/") ? "/api" : "/agent";
+    if (url.pathname === agentPrefix || url.pathname.startsWith(`${agentPrefix}/`)) {
       if (!isAuthorized(request, env)) {
         return unauthorizedResponse();
       }
@@ -91,19 +93,13 @@ export default {
       await incrementRequest(env, `agent-${tokenHash}`);
 
       const stub = getHarnessStub(env);
-      const agentPath = url.pathname.replace("/agent", "") || "/status";
+      const agentPath = url.pathname.slice(agentPrefix.length) || "/status";
       const agentUrl = new URL(agentPath, "http://harness");
       agentUrl.search = url.search;
-      return stub.fetch(
-        new Request(agentUrl.toString(), {
-          method: request.method,
-          headers: request.headers,
-          body: request.body,
-        })
-      );
+      return stub.fetch(new Request(agentUrl.toString(), request));
     }
 
-    return new Response("Not found", { status: 404 });
+    return env.ASSETS ? env.ASSETS.fetch(request) : new Response("Not found", { status: 404 });
   },
 
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {

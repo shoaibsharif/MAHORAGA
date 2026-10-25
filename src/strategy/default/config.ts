@@ -7,6 +7,7 @@
  */
 
 import type { AgentConfig, AgentState } from "../../core/types";
+import type { Env } from "../../env.d";
 
 // ── Source weights & tuning ──────────────────────────────────────────────────
 
@@ -91,6 +92,15 @@ export const DEFAULT_CONFIG: AgentConfig = {
   ticker_blacklist: [],
   allowed_exchanges: ["NYSE", "NASDAQ", "ARCA", "AMEX", "BATS"],
 };
+
+export function getInitialAgentConfig(env: Pick<Env, "LLM_PROVIDER" | "LLM_MODEL">): AgentConfig {
+  return {
+    ...DEFAULT_CONFIG,
+    llm_provider: env.LLM_PROVIDER || DEFAULT_CONFIG.llm_provider,
+    llm_model: env.LLM_MODEL || DEFAULT_CONFIG.llm_model,
+    llm_analyst_model: env.LLM_MODEL || DEFAULT_CONFIG.llm_analyst_model,
+  };
+}
 
 // ── Default agent state ──────────────────────────────────────────────────────
 

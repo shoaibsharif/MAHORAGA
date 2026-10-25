@@ -31,7 +31,7 @@ import type { AgentConfig } from "../schemas/agent-config";
 import { safeValidateAgentConfig } from "../schemas/agent-config";
 import { createD1Client } from "../storage/d1/client";
 import { activeStrategy } from "../strategy";
-import { DEFAULT_STATE } from "../strategy/default/config";
+import { DEFAULT_STATE, getInitialAgentConfig } from "../strategy/default/config";
 import {
   checkTwitterBreakingNews,
   gatherTwitterConfirmation,
@@ -73,6 +73,8 @@ export class MahoragaHarness extends DurableObject<Env> {
         this.state = { ...DEFAULT_STATE, ...stored };
         this.state.config = { ...DEFAULT_STATE.config, ...this.state.config };
         if (!Number.isFinite(this.state.realizedPnl)) this.state.realizedPnl = 0;
+      } else {
+        this.state.config = getInitialAgentConfig(this.env);
       }
       this.state.config.options_enabled = false;
       this.state.config.crypto_enabled = false;
