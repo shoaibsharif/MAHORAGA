@@ -16,9 +16,10 @@ import type { AlpacaProviders } from "../providers/alpaca";
 import type { Account, MarketClock, Position } from "../providers/types";
 import type { D1Client } from "../storage/d1/client";
 import type { RiskState } from "../storage/d1/queries/risk-state";
-import { getRiskState } from "../storage/d1/queries/risk-state";
+import { getRiskState, recordDailyLoss, setCooldown } from "../storage/d1/queries/risk-state";
 import { isCryptoSymbol, normalizeCryptoSymbol } from "../strategy/default/helpers/crypto";
 import type { StrategyContext } from "../strategy/types";
+import { getSleeve, roundCents } from "./sleeve";
 
 export interface PolicyBrokerDeps {
   alpaca: AlpacaProviders;
@@ -31,6 +32,16 @@ export interface PolicyBrokerDeps {
   onBuy?: (symbol: string, notional: number) => void;
   /** Called after a successful sell/close order */
   onSell?: (symbol: string, reason: string) => void;
+  /**
+   * When set, buys and risk checks use this bankroll instead of the full broker account.
+   * Realized P&L is reported back so the sleeve compounds after closes.
+   */
+  sleeve?: {
+    getStartingEquity: () => number;
+    getRealizedPnl: () => number;
+    addRealizedPnl: (delta: number) => void;
+    getReserved: () => number;
+  };
 }
 
 /**
@@ -147,7 +158,10 @@ export function createPolicyBroker(deps: PolicyBrokerDeps): StrategyContext["bro
         getRiskStateOrDefault(),
       ]);
 
-      const ctx: PolicyContext = { order, account, positions, clock, riskState };
+      const policyAccount = accountForPolicy(account, positions, order.notional ?? notional);
+      if (!policyAccount) return false;
+
+      const ctx: PolicyContext = { order, account: policyAccount, positions, clock, riskState };
       const result = engine.evaluate(ctx);
 
       if (!result.allowed) {
@@ -222,8 +236,29 @@ export function createPolicyBroker(deps: PolicyBrokerDeps): StrategyContext["bro
         }
       }
 
+      const positions = await getPositions();
+      const position = positions.find((item) => item.symbol.toUpperCase() === symbol.toUpperCase());
+      const pnl = position && Number.isFinite(position.unrealized_pl) ? position.unrealized_pl : null;
+
       await alpaca.trading.closePosition(symbol);
-      log("PolicyBroker", "sell_executed", { symbol, reason });
+
+      if (pnl != null) {
+        deps.sleeve?.addRealizedPnl(roundCents(pnl));
+        const loss = roundCents(-pnl);
+        if (loss >= 0.01 && db) {
+          try {
+            await recordDailyLoss(db, loss);
+            if (policyConfig.cooldown_minutes_after_loss > 0) {
+              const until = new Date(Date.now() + policyConfig.cooldown_minutes_after_loss * 60_000).toISOString();
+              await setCooldown(db, until);
+            }
+          } catch (error) {
+            log("PolicyBroker", "loss_record_failed", { symbol, error: String(error) });
+          }
+        }
+      }
+
+      log("PolicyBroker", "sell_executed", { symbol, reason, pnl });
 
       // Invalidate cache after order
       cachedAccount = null;
@@ -235,6 +270,31 @@ export function createPolicyBroker(deps: PolicyBrokerDeps): StrategyContext["bro
       log("PolicyBroker", "sell_failed", { symbol, error: String(error) });
       return false;
     }
+  }
+
+  function accountForPolicy(account: Account, positions: Position[], notional: number): Account | null {
+    if (!deps.sleeve) return account;
+
+    const sleeve = getSleeve(positions, deps.sleeve.getStartingEquity(), deps.sleeve.getRealizedPnl());
+    const available = roundCents(Math.min(account.cash, sleeve.cash) - deps.sleeve.getReserved());
+    if (sleeve.equity <= 0 || available <= 0 || notional > available + 0.001) {
+      log("PolicyBroker", "buy_blocked", {
+        reason: "Order exceeds the trading sleeve",
+        notional,
+        sleeve_equity: sleeve.equity,
+        sleeve_cash: sleeve.cash,
+        available,
+      });
+      return null;
+    }
+
+    return {
+      ...account,
+      cash: available,
+      buying_power: Math.min(account.buying_power, available),
+      equity: sleeve.equity,
+      portfolio_value: sleeve.equity,
+    };
   }
 
   return {

@@ -2,6 +2,7 @@
  * Analyst prompt builder — batch signal analysis for trading decisions.
  */
 
+import { getSleeve } from "../../../core/sleeve";
 import type { Account, Position, Signal } from "../../../core/types";
 import type { AnalyzeSignalsPromptBuilder, PromptTemplate, StrategyContext } from "../../types";
 
@@ -12,7 +13,7 @@ import type { AnalyzeSignalsPromptBuilder, PromptTemplate, StrategyContext } fro
 export const analyzeSignalsPrompt: AnalyzeSignalsPromptBuilder = (
   signals: Signal[],
   positions: Position[],
-  account: Account,
+  _account: Account,
   ctx: StrategyContext
 ): PromptTemplate => {
   const aggregated = new Map<string, { symbol: string; sources: string[]; totalSentiment: number; count: number }>();
@@ -33,12 +34,14 @@ export const analyzeSignalsPrompt: AnalyzeSignalsPromptBuilder = (
     .slice(0, 10);
 
   const positionSymbols = new Set(positions.map((p) => p.symbol));
+  const sleeve = getSleeve(positions, ctx.config.starting_equity, ctx.state.get<number>("realizedPnl") ?? 0);
 
   const user = `Current Time: ${new Date().toISOString()}
 
 ACCOUNT STATUS:
-- Equity: $${account.equity.toFixed(2)}
-- Cash: $${account.cash.toFixed(2)}
+- Trading sleeve equity: $${sleeve.equity.toFixed(2)}
+- Trading sleeve cash: $${sleeve.cash.toFixed(2)}
+- Starting bankroll: $${ctx.config.starting_equity.toFixed(2)}
 - Current Positions: ${positions.length}/${ctx.config.max_positions}
 
 CURRENT POSITIONS:

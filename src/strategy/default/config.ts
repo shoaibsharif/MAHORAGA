@@ -117,5 +117,6 @@ export const DEFAULT_STATE: AgentState = {
   premarketPlan: null,
   lastPremarketPlanDayEt: null,
   lastClockIsOpen: null,
+  realizedPnl: 0,
   enabled: false,
 };

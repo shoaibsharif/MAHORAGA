@@ -157,5 +157,7 @@ export interface AgentState {
   premarketPlan: PremarketPlan | null;
   lastPremarketPlanDayEt: string | null;
   lastClockIsOpen: boolean | null;
+  /** Closed-trade P&L credited to the trading sleeve. */
+  realizedPnl: number;
   enabled: boolean;
 }

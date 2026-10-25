@@ -6,8 +6,9 @@
  */
 
 import type { Account, Position, ResearchResult } from "../../../core/types";
+import { getDefaultPolicyConfig } from "../../../policy/config";
 import type { BuyCandidate, StrategyContext } from "../../types";
-import { getEntryNotional } from "../helpers/position-sizing";
+import { entryNotionalFor } from "../helpers/position-sizing";
 
 /**
  * Select entry candidates from LLM-researched signals.
@@ -34,7 +35,14 @@ export function selectEntries(
   for (const r of buyResearch.slice(0, 3)) {
     if (positions.length + candidates.length >= ctx.config.max_positions) break;
 
-    const notional = getEntryNotional(account, r.confidence, ctx.config);
+    const notional = entryNotionalFor({
+      accountCash: account.cash,
+      positions,
+      confidence: r.confidence,
+      config: ctx.config,
+      realizedPnl: ctx.state.get<number>("realizedPnl") ?? 0,
+      policy: getDefaultPolicyConfig(ctx.env),
+    });
     if (notional === 0) continue;
 
     const shouldUseOptions =

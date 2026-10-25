@@ -33,7 +33,7 @@ Both npm lockfiles contain the verified dependency versions. Cloudflare Agents c
 
 ## Quick Start
 
-For a small paper account that mirrors a $100 starting balance, set `starting_equity=100`, `min_trade_notional=1`, `position_size_pct_of_cash=10`, and `max_position_value=null` through the dashboard or authenticated `/agent/config` endpoint. A blank **Position Dollar Cap** means there is no fixed dollar ceiling. Set `DEFAULT_MAX_NOTIONAL_PER_TRADE=none` and keep `DEFAULT_MAX_POSITION_PCT=0.10` in local `.dev.vars` to retain the 10% per-stock risk limit as the account changes. Cash-only checks still apply; options and crypto can remain disabled. Stock entries use dollar-based fractional market orders on eligible assets, with a $1 minimum ([Alpaca fractional trading](https://docs.alpaca.markets/us/docs/fractional-trading)). This changes sizing and the P&L baseline; it does not fund the account or enable live trading. MiniMax API usage is billed separately from the brokerage balance.
+Orders are sized from a sleeve that starts at `starting_equity` (default $100) and compounds with the agent's realized and unrealized P&L. Alpaca's paper cash is left untouched, including the usual $100,000 paper balance. With `position_size_pct_of_cash=10` and `DEFAULT_MAX_POSITION_PCT=0.10`, a $100 sleeve buys about $6–$10 per stock entry. Leave the position dollar cap blank, keep `min_trade_notional=1`, and set `DEFAULT_MAX_NOTIONAL_PER_TRADE=none` when you do not want a fixed dollar ceiling. Stock entries are fractional dollar market orders on assets Alpaca marks tradable and fractionable ([Alpaca fractional trading](https://docs.alpaca.markets/us/docs/fractional-trading)). A losing close is recorded against the sleeve and starts the loss cooldown. Leave options and crypto disabled. Other open positions in the same Alpaca account count against the sleeve, so start from a flat paper book. This does not fund the account or enable live trading. MiniMax API usage is billed separately from the brokerage balance.
 
 ### 1. Clone and install
 
@@ -209,7 +209,7 @@ See `docs/harness.html` for the full customization guide.
 | `max_positions` | 5 | Maximum concurrent positions |
 | `max_position_value` | null | Optional dollar cap; percentage and cash limits still apply |
 | `min_trade_notional` | 1 | Minimum dollar value of a stock entry |
-| `starting_equity` | 100 | Starting balance for P&L calculations |
+| `starting_equity` | 100 | Sleeve bankroll. Agent P&L compounds on top of this |
 | `position_size_pct_of_cash` | 10 | Cash percentage used to size entries before confidence adjustment |
 | `take_profit_pct` | 10 | Take profit percentage |
 | `stop_loss_pct` | 5 | Stop loss percentage |

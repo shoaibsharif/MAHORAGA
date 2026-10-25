@@ -11,6 +11,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import { createPolicyBroker } from "../core/policy-broker";
+import { getSleeve, roundCents } from "../core/sleeve";
 import type {
   AgentState,
   LogEntry,
@@ -35,7 +36,7 @@ import {
   isTwitterEnabled,
 } from "../strategy/default/gatherers/twitter";
 import { isCryptoSymbol, normalizeCryptoSymbol } from "../strategy/default/helpers/crypto";
-import { getEntryNotional } from "../strategy/default/helpers/position-sizing";
+import { entryNotionalFor } from "../strategy/default/helpers/position-sizing";
 import { tickerCache } from "../strategy/default/helpers/ticker";
 import { runCryptoTrading } from "../strategy/default/rules/crypto-trading";
 import { findBestOptionsContract } from "../strategy/default/rules/options";
@@ -48,6 +49,7 @@ import type { StrategyContext } from "../strategy/types";
 export class MahoragaHarness extends DurableObject<Env> {
   private state: AgentState = { ...DEFAULT_STATE };
   private _llm: LLMProvider | null = null;
+  private sleeveReserved = 0;
   private _etDayFormatter: Intl.DateTimeFormat | null = null;
   private discordCooldowns: Map<string, number> = new Map();
   private readonly DISCORD_COOLDOWN_MS = 30 * 60 * 1000;
@@ -67,6 +69,7 @@ export class MahoragaHarness extends DurableObject<Env> {
       if (stored) {
         this.state = { ...DEFAULT_STATE, ...stored };
         this.state.config = { ...DEFAULT_STATE.config, ...this.state.config };
+        if (!Number.isFinite(this.state.realizedPnl)) this.state.realizedPnl = 0;
       }
       this.initializeLLM();
 
@@ -149,6 +152,17 @@ export class MahoragaHarness extends DurableObject<Env> {
       log: (agent, action, details) => self.log(agent, action, details),
       cryptoSymbols: self.state.config.crypto_symbols || [],
       allowedExchanges: self.state.config.allowed_exchanges ?? ["NYSE", "NASDAQ", "ARCA", "AMEX", "BATS"],
+      sleeve: {
+        getStartingEquity: () => self.state.config.starting_equity,
+        getRealizedPnl: () => self.state.realizedPnl,
+        addRealizedPnl: (delta) => {
+          self.state.realizedPnl = roundCents(self.state.realizedPnl + delta);
+        },
+        getReserved: () => self.sleeveReserved,
+      },
+      onBuy: (_symbol, notional) => {
+        self.sleeveReserved = roundCents(self.sleeveReserved + notional);
+      },
       onSell: (symbol) => {
         delete self.state.positionEntries[symbol];
         delete self.state.socialHistory[symbol];
@@ -193,6 +207,7 @@ export class MahoragaHarness extends DurableObject<Env> {
     const premarketPlanWindowMinutes = Math.max(1, this.state.config.premarket_plan_window_minutes ?? 5);
     const marketOpenExecuteWindowMinutes = Math.max(0, this.state.config.market_open_execute_window_minutes ?? 2);
 
+    this.sleeveReserved = 0;
     const ctx = this.buildStrategyContext();
 
     try {
@@ -784,11 +799,13 @@ export class MahoragaHarness extends DurableObject<Env> {
 
       if (finalConfidence < this.state.config.min_analyst_confidence) continue;
 
-      // Options routing
+      // Options routing. A filled options order spends the sleeve, so the stock buy is skipped.
       if (entry.useOptions) {
-        const contract = await findBestOptionsContract(ctx, entry.symbol, "bullish", account.equity);
+        const sleeve = getSleeve(positions, this.state.config.starting_equity, this.state.realizedPnl);
+        const contract = await findBestOptionsContract(ctx, entry.symbol, "bullish", Math.max(0, sleeve.equity));
         if (contract) {
-          await this.executeOptionsOrder(contract, 1, account.equity);
+          const placed = await this.executeOptionsOrder(contract, 1, sleeve.equity, sleeve.cash);
+          if (placed) continue;
         }
       }
 
@@ -853,7 +870,7 @@ export class MahoragaHarness extends DurableObject<Env> {
         if (heldSymbols.has(rec.symbol)) continue;
         if (entrySymbols.has(rec.symbol)) continue;
 
-        const notional = getEntryNotional(account, rec.confidence, this.state.config);
+        const notional = this.entryNotional(account, positions, rec.confidence);
         if (notional === 0) continue;
 
         const result = await ctx.broker.buy(rec.symbol, notional, rec.reasoning);
@@ -879,15 +896,28 @@ export class MahoragaHarness extends DurableObject<Env> {
     }
   }
 
+  private entryNotional(account: Account, positions: Position[], confidence: number): number {
+    return entryNotionalFor({
+      accountCash: account.cash,
+      positions,
+      confidence,
+      config: this.state.config,
+      realizedPnl: this.state.realizedPnl,
+      policy: getDefaultPolicyConfig(this.env),
+    });
+  }
+
   private async executeOptionsOrder(
     contract: { symbol: string; mid_price: number },
     quantity: number,
-    equity: number
+    equity: number,
+    sleeveCash: number
   ): Promise<boolean> {
     if (!this.state.config.options_enabled) return false;
 
     const totalCost = contract.mid_price * quantity * 100;
-    const maxAllowed = equity * this.state.config.options_max_pct_per_trade;
+    const spendable = Math.max(0, sleeveCash - this.sleeveReserved);
+    const maxAllowed = Math.min(equity * this.state.config.options_max_pct_per_trade, spendable);
     let qty = quantity;
 
     if (totalCost > maxAllowed) {
@@ -909,11 +939,13 @@ export class MahoragaHarness extends DurableObject<Env> {
         time_in_force: "day",
       });
 
+      const estimatedCost = contract.mid_price * qty * 100;
+      this.sleeveReserved = roundCents(this.sleeveReserved + estimatedCost);
       this.log("Options", "options_buy_executed", {
         contract: contract.symbol,
         qty,
         status: order.status,
-        estimated_cost: (contract.mid_price * qty * 100).toFixed(2),
+        estimated_cost: estimatedCost.toFixed(2),
       });
       return true;
     } catch (error) {
@@ -999,7 +1031,7 @@ export class MahoragaHarness extends DurableObject<Env> {
         if (heldSymbols.has(rec.symbol)) continue;
         if (positions.length >= this.state.config.max_positions) break;
 
-        const notional = getEntryNotional(account, rec.confidence, this.state.config);
+        const notional = this.entryNotional(account, positions, rec.confidence);
         if (notional === 0) continue;
 
         const result = await ctx.broker.buy(rec.symbol, notional, `Pre-market plan: ${rec.reasoning}`);
@@ -1176,6 +1208,7 @@ export class MahoragaHarness extends DurableObject<Env> {
         twitterConfirmations: this.state.twitterConfirmations,
         premarketPlan: this.state.premarketPlan,
         stalenessAnalysis: this.state.stalenessAnalysis,
+        sleeve: getSleeve(positions, this.state.config.starting_equity, this.state.realizedPnl),
       },
     });
   }

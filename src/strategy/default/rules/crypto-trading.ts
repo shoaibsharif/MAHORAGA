@@ -7,8 +7,10 @@
  */
 
 import type { Position, ResearchResult } from "../../../core/types";
+import { getDefaultPolicyConfig } from "../../../policy/config";
 import { createAlpacaProviders } from "../../../providers/alpaca";
 import type { StrategyContext } from "../../types";
+import { entryNotionalFor } from "../helpers/position-sizing";
 
 /**
  * Research a crypto symbol for BUY/SKIP/WAIT verdict.
@@ -175,14 +177,21 @@ export async function runCryptoTrading(ctx: StrategyContext, positions: Position
     }
 
     const account = await ctx.broker.getAccount();
-    const sizePct = Math.min(20, ctx.config.position_size_pct_of_cash);
-    const positionSize = Math.min(
-      account.cash * (sizePct / 100) * research.confidence,
-      ctx.config.crypto_max_position_value
-    );
+    const positionSize = entryNotionalFor({
+      accountCash: account.cash,
+      positions,
+      confidence: research.confidence,
+      config: ctx.config,
+      realizedPnl: ctx.state.get<number>("realizedPnl") ?? 0,
+      policy: getDefaultPolicyConfig(ctx.env),
+      maxPositionValue:
+        ctx.config.max_position_value == null
+          ? ctx.config.crypto_max_position_value
+          : Math.min(ctx.config.max_position_value, ctx.config.crypto_max_position_value),
+    });
 
-    if (positionSize < 10) {
-      ctx.log("Crypto", "buy_skipped", { symbol: signal.symbol, reason: "Position too small" });
+    if (positionSize === 0) {
+      ctx.log("Crypto", "buy_skipped", { symbol: signal.symbol, reason: "Position too small for the trading sleeve" });
       continue;
     }
 
