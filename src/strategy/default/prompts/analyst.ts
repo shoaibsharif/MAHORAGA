@@ -70,7 +70,8 @@ ${signals
   .join("\n")}
 
 TRADING RULES:
-- Max position size: $${ctx.config.max_position_value}
+- Fixed position dollar cap: ${ctx.config.max_position_value === null ? "None; percentage and cash limits still apply" : `$${ctx.config.max_position_value}`}
+- Minimum entry value: $${ctx.config.min_trade_notional}
 - Take profit target: ${ctx.config.take_profit_pct}%
 - Stop loss: ${ctx.config.stop_loss_pct}%
 - Min confidence to trade: ${ctx.config.min_analyst_confidence}

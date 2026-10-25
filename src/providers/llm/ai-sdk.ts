@@ -3,6 +3,7 @@ import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
+import { createMinimax } from "@minimax-ai/ai-sdk-provider";
 import { generateText } from "ai";
 import { createError, ErrorCode } from "../../lib/errors";
 import type { CompletionParams, CompletionResult, LLMProvider } from "../types";
@@ -16,6 +17,7 @@ export const SUPPORTED_PROVIDERS = {
   google: { envKey: "GOOGLE_GENERATIVE_AI_API_KEY", name: "Google" },
   xai: { envKey: "XAI_API_KEY", name: "xAI (Grok)" },
   deepseek: { envKey: "DEEPSEEK_API_KEY", name: "DeepSeek" },
+  minimax: { envKey: "MINIMAX_API_KEY", name: "MiniMax" },
 } as const;
 
 export type SupportedProvider = keyof typeof SUPPORTED_PROVIDERS;
@@ -29,6 +31,7 @@ export const PROVIDER_MODELS: Record<SupportedProvider, string[]> = {
   google: ["gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-3-pro-preview"],
   xai: ["grok-4", "grok-3", "grok-4-fast-reasoning"],
   deepseek: ["deepseek-chat", "deepseek-reasoner"],
+  minimax: ["MiniMax-M3.1-Flash", "MiniMax-M3"],
 };
 
 export interface AISDKConfig {
@@ -45,12 +48,13 @@ type ProviderFactory =
   | ReturnType<typeof createAnthropic>
   | ReturnType<typeof createGoogleGenerativeAI>
   | ReturnType<typeof createXai>
-  | ReturnType<typeof createDeepSeek>;
+  | ReturnType<typeof createDeepSeek>
+  | ReturnType<typeof createMinimax>;
 
 /**
  * AI SDK Provider - Supports multiple AI providers via Vercel AI SDK
  *
- * Supports 5 providers: OpenAI, Anthropic, Google, xAI, DeepSeek
+ * Supports OpenAI, Anthropic, Google, xAI, DeepSeek, and MiniMax
  * Model format: "provider/model" (e.g., "openai/gpt-4o", "xai/grok-4")
  */
 export class AISDKProvider implements LLMProvider {
@@ -80,6 +84,9 @@ export class AISDKProvider implements LLMProvider {
     }
     if (config.apiKeys.deepseek) {
       this.providers.deepseek = createDeepSeek({ apiKey: config.apiKeys.deepseek });
+    }
+    if (config.apiKeys.minimax) {
+      this.providers.minimax = createMinimax({ apiKey: config.apiKeys.minimax });
     }
 
     if (Object.keys(this.providers).length === 0) {
@@ -116,15 +123,45 @@ export class AISDKProvider implements LLMProvider {
         );
       }
 
+      const isMiniMax = providerName === "minimax";
+      const jsonOutput = isMiniMax && params.response_format?.type === "json_object";
+      const instructions = params.messages.filter((msg) => msg.role === "system").map((msg) => msg.content);
+      if (jsonOutput) {
+        instructions.push(
+          "Return exactly one valid JSON object. Do not include markdown fences or text outside the object."
+        );
+      }
       const result = await generateText({
         model: provider(modelId),
-        messages: params.messages.map((msg) => ({
-          role: msg.role,
-          content: msg.content,
-        })),
-        temperature: params.temperature ?? 0.7,
-        maxOutputTokens: params.max_tokens ?? 1024,
+        messages: params.messages.flatMap((msg) =>
+          msg.role === "system" ? [] : [{ role: msg.role, content: msg.content }]
+        ),
+        ...(instructions.length > 0 && { instructions: instructions.join("\n\n") }),
+        ...(isMiniMax
+          ? {
+              // Reasoning shares the output budget with the final answer.
+              maxOutputTokens: Math.max(params.max_tokens ?? 8192, 8192),
+              providerOptions: { minimax: { thinking: { type: "adaptive" }, effort: "medium" } },
+              abortSignal: AbortSignal.timeout(60_000),
+              maxRetries: 0,
+            }
+          : {
+              temperature: params.temperature ?? 0.7,
+              maxOutputTokens: params.max_tokens ?? 1024,
+            }),
       });
+
+      if (isMiniMax) {
+        if (result.finishReason !== "stop" || !result.text.trim()) {
+          throw createError(ErrorCode.PROVIDER_ERROR, `MiniMax returned an incomplete answer (${result.finishReason})`);
+        }
+        if (jsonOutput) {
+          const parsed: unknown = JSON.parse(result.text);
+          if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+            throw createError(ErrorCode.PROVIDER_ERROR, "MiniMax must return a JSON object");
+          }
+        }
+      }
 
       return {
         content: result.text,

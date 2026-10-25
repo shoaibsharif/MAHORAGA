@@ -26,11 +26,16 @@ vi.mock("@ai-sdk/deepseek", () => ({
   createDeepSeek: vi.fn(() => vi.fn((model: string) => ({ provider: "deepseek", model }))),
 }));
 
+vi.mock("@minimax-ai/ai-sdk-provider", () => ({
+  createMinimax: vi.fn(() => vi.fn((model: string) => ({ provider: "minimax", model }))),
+}));
+
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createXai } from "@ai-sdk/xai";
+import { createMinimax } from "@minimax-ai/ai-sdk-provider";
 // Import after mocks
 import { generateText } from "ai";
 import { AISDKProvider, createAISDKProvider, PROVIDER_MODELS, SUPPORTED_PROVIDERS } from "./ai-sdk";
@@ -52,7 +57,7 @@ describe("AI SDK Provider", () => {
 
   describe("SUPPORTED_PROVIDERS", () => {
     it("contains all expected providers", () => {
-      expect(Object.keys(SUPPORTED_PROVIDERS)).toEqual(["openai", "anthropic", "google", "xai", "deepseek"]);
+      expect(Object.keys(SUPPORTED_PROVIDERS)).toEqual(["openai", "anthropic", "google", "xai", "deepseek", "minimax"]);
     });
 
     it("has correct env keys", () => {
@@ -61,6 +66,7 @@ describe("AI SDK Provider", () => {
       expect(SUPPORTED_PROVIDERS.google.envKey).toBe("GOOGLE_GENERATIVE_AI_API_KEY");
       expect(SUPPORTED_PROVIDERS.xai.envKey).toBe("XAI_API_KEY");
       expect(SUPPORTED_PROVIDERS.deepseek.envKey).toBe("DEEPSEEK_API_KEY");
+      expect(SUPPORTED_PROVIDERS.minimax.envKey).toBe("MINIMAX_API_KEY");
     });
   });
 
@@ -71,6 +77,7 @@ describe("AI SDK Provider", () => {
       expect(PROVIDER_MODELS.google).toContain("gemini-2.5-pro");
       expect(PROVIDER_MODELS.xai).toContain("grok-4");
       expect(PROVIDER_MODELS.deepseek).toContain("deepseek-chat");
+      expect(PROVIDER_MODELS.minimax).toContain("MiniMax-M3.1-Flash");
     });
   });
 
@@ -133,6 +140,15 @@ describe("AI SDK Provider", () => {
       expect(createOpenAI).toHaveBeenCalledWith({ apiKey: "sk-test" });
       expect(createAnthropic).toHaveBeenCalledWith({ apiKey: "sk-ant-test" });
       expect(createGoogleGenerativeAI).toHaveBeenCalledWith({ apiKey: "google-test" });
+    });
+
+    it("creates MiniMax through its maintained AI SDK provider", () => {
+      const provider = createAISDKProvider({
+        model: "minimax/MiniMax-M3.1-Flash",
+        apiKeys: { minimax: "minimax-test" },
+      });
+      expect(provider.getAvailableProviders()).toEqual(["minimax"]);
+      expect(createMinimax).toHaveBeenCalledWith({ apiKey: "minimax-test" });
     });
 
     it("throws when no API keys provided", () => {

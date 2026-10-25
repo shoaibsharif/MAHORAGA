@@ -48,6 +48,15 @@ function createValidConfig() {
 
 describe("AgentConfigSchema", () => {
   describe("valid configurations", () => {
+    it("defaults missing baseline and entry minimum fields to the $100 setup", () => {
+      const parsed = AgentConfigSchema.parse({
+        ...createValidConfig(),
+        max_position_value: null,
+      });
+      expect(parsed.starting_equity).toBe(100);
+      expect(parsed.max_position_value).toBeNull();
+      expect(parsed.min_trade_notional).toBe(1);
+    });
     it("accepts a valid configuration", () => {
       const config = createValidConfig();
       const result = AgentConfigSchema.safeParse(config);
@@ -77,6 +86,12 @@ describe("AgentConfigSchema", () => {
   });
 
   describe("invalid configurations", () => {
+    it("rejects sub-dollar entry minimums and minimums above a fixed position cap", () => {
+      expect(AgentConfigSchema.safeParse({ ...createValidConfig(), min_trade_notional: 0.5 }).success).toBe(false);
+      expect(
+        AgentConfigSchema.safeParse({ ...createValidConfig(), min_trade_notional: 100, max_position_value: 10 }).success
+      ).toBe(false);
+    });
     it("rejects negative max_position_value", () => {
       const config = { ...createValidConfig(), max_position_value: -1000 };
       const result = AgentConfigSchema.safeParse(config);

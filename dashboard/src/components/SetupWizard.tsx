@@ -15,7 +15,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
   const [alpacaSecret, setAlpacaSecret] = useState('')
   const [openaiKey, setOpenaiKey] = useState('')
   const [paperMode, setPaperMode] = useState(true)
-  const [startingEquity, setStartingEquity] = useState(100000)
+  const [startingEquity, setStartingEquity] = useState(100)
 
   const handleSubmit = async () => {
     if (!alpacaKey || !alpacaSecret) {

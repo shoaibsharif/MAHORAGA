@@ -178,7 +178,7 @@ export class PolicyEngine {
   private checkNotionalLimit(ctx: PolicyContext, violations: PolicyViolation[]): void {
     const estimatedNotional = this.estimateNotional(ctx.order);
 
-    if (estimatedNotional > this.config.max_notional_per_trade) {
+    if (this.config.max_notional_per_trade !== null && estimatedNotional > this.config.max_notional_per_trade) {
       violations.push({
         rule: "max_notional",
         message: `Order notional $${estimatedNotional.toFixed(2)} exceeds limit of $${this.config.max_notional_per_trade}`,

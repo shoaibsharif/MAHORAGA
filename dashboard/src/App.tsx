@@ -210,8 +210,9 @@ export default function App() {
       body: JSON.stringify(config),
     })
     const data = await res.json()
-    if (data.ok && status) {
-      setStatus({ ...status, config: data.data })
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Configuration could not be saved')
+    if (status) {
+      setStatus({ ...status, config: data.config })
     }
   }
 
@@ -224,7 +225,7 @@ export default function App() {
   const config = status?.config
   const isMarketOpen = status?.clock?.is_open ?? false
 
-  const startingEquity = config?.starting_equity || 100000
+  const startingEquity = config?.starting_equity ?? 100
   const unrealizedPl = positions.reduce((sum, p) => sum + p.unrealized_pl, 0)
   const totalPl = account ? account.equity - startingEquity : 0
   const realizedPl = totalPl - unrealizedPl
@@ -815,7 +816,7 @@ export default function App() {
           <div className="flex flex-wrap gap-4 md:gap-6">
             {config && (
               <>
-                <MetricInline label="MAX POS" value={`$${config.max_position_value}`} />
+                <MetricInline label="MAX POS" value={config.max_position_value === null ? `${((status?.riskLimits?.max_position_pct_equity ?? 0.1) * 100).toFixed(0)}% EQUITY` : `$${config.max_position_value}`} />
                 <MetricInline label="MIN SENT" value={`${(config.min_sentiment_score * 100).toFixed(0)}%`} />
                 <MetricInline label="TAKE PROFIT" value={`${config.take_profit_pct}%`} />
                 <MetricInline label="STOP LOSS" value={`${config.stop_loss_pct}%`} />

@@ -15,7 +15,7 @@ export async function insertToolLog(
 ): Promise<string> {
   const id = generateId();
   const inputJson = JSON.stringify(entry.input);
-  const inputHash = hashObject(entry.input);
+  const inputHash = await hashObject(entry.input);
 
   await db.run(
     `INSERT INTO tool_logs (id, request_id, tool_name, input_hash, input_json, output_json, error_json, latency_ms, provider_calls, created_at)

@@ -6,7 +6,7 @@ An autonomous, LLM-powered trading agent that runs 24/7 on Cloudflare Workers.
 
 [![Discord](https://img.shields.io/discord/1467592472158015553?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/vMFnHe2YBh)
 
-MAHORAGA monitors social sentiment from StockTwits and Reddit, uses AI (OpenAI, Anthropic, Google, xAI, DeepSeek via AI SDK) to analyze signals, and executes trades through Alpaca. It runs as a Cloudflare Durable Object with persistent state, automatic restarts, and 24/7 crypto trading support.
+MAHORAGA monitors social sentiment from StockTwits and Reddit, uses AI (OpenAI, Anthropic, Google, xAI, DeepSeek, MiniMax via AI SDK) to analyze signals, and executes trades through Alpaca. It runs as a Cloudflare Durable Object with persistent state, automatic restarts, and 24/7 crypto trading support.
 
 <img width="1278" height="957" alt="dashboard" src="https://github.com/user-attachments/assets/56473ab6-e2c6-45fc-9e32-cf85e69f1a2d" />
 
@@ -14,7 +14,7 @@ MAHORAGA monitors social sentiment from StockTwits and Reddit, uses AI (OpenAI, 
 
 - **24/7 Operation** — Runs on Cloudflare Workers, no local machine required
 - **Multi-Source Signals** — StockTwits, Reddit (4 subreddits), Twitter confirmation
-- **Multi-Provider LLM** — OpenAI, Anthropic, Google, xAI, DeepSeek via AI SDK or Cloudflare AI Gateway
+- **Multi-Provider LLM** — OpenAI, Anthropic, Google, xAI, DeepSeek, MiniMax via AI SDK or Cloudflare AI Gateway
 - **Crypto Trading** — Trade BTC, ETH, SOL around the clock
 - **Options Support** — High-conviction options plays
 - **Staleness Detection** — Auto-exit positions that lose momentum
@@ -24,12 +24,16 @@ MAHORAGA monitors social sentiment from StockTwits and Reddit, uses AI (OpenAI, 
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 22.12+ (Node.js 24 or 26 recommended)
 - Cloudflare account (free tier works)
 - Alpaca account (free, paper trading supported)
-- LLM API key (OpenAI, Anthropic, Google, xAI, DeepSeek) or Cloudflare AI Gateway credentials
+- LLM API key (OpenAI, Anthropic, Google, xAI, DeepSeek, MiniMax) or Cloudflare AI Gateway credentials
+
+Both npm lockfiles contain the verified dependency versions. Cloudflare Agents currently requires MCP SDK `1.32.1`; keep that version aligned with its peer dependency. The Miniflare-scoped `undici` override selects patched `7.30.1` because the current Wrangler release still pins an affected version. Recheck the override when updating Wrangler ([advisory](https://github.com/advisories/GHSA-xjj6-f33q-929c)).
 
 ## Quick Start
+
+For a small paper account that mirrors a $100 starting balance, set `starting_equity=100`, `min_trade_notional=1`, `position_size_pct_of_cash=10`, and `max_position_value=null` through the dashboard or authenticated `/agent/config` endpoint. A blank **Position Dollar Cap** means there is no fixed dollar ceiling. Set `DEFAULT_MAX_NOTIONAL_PER_TRADE=none` and keep `DEFAULT_MAX_POSITION_PCT=0.10` in local `.dev.vars` to retain the 10% per-stock risk limit as the account changes. Cash-only checks still apply; options and crypto can remain disabled. Stock entries use dollar-based fractional market orders on eligible assets, with a $1 minimum ([Alpaca fractional trading](https://docs.alpaca.markets/us/docs/fractional-trading)). This changes sizing and the P&L baseline; it does not fund the account or enable live trading. MiniMax API usage is billed separately from the brokerage balance.
 
 ### 1. Clone and install
 
@@ -203,7 +207,10 @@ See `docs/harness.html` for the full customization guide.
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `max_positions` | 5 | Maximum concurrent positions |
-| `max_position_value` | 5000 | Maximum $ per position |
+| `max_position_value` | null | Optional dollar cap; percentage and cash limits still apply |
+| `min_trade_notional` | 1 | Minimum dollar value of a stock entry |
+| `starting_equity` | 100 | Starting balance for P&L calculations |
+| `position_size_pct_of_cash` | 10 | Cash percentage used to size entries before confidence adjustment |
 | `take_profit_pct` | 10 | Take profit percentage |
 | `stop_loss_pct` | 5 | Stop loss percentage |
 | `min_sentiment_score` | 0.3 | Minimum sentiment to consider |
@@ -220,8 +227,18 @@ MAHORAGA supports multiple LLM providers via three modes:
 | Mode | Description | Required Env Vars |
 |------|-------------|-------------------|
 | `openai-raw` | Direct OpenAI API (default) | `OPENAI_API_KEY` |
-| `ai-sdk` | Vercel AI SDK with 5 providers | One or more provider keys |
+| `ai-sdk` | Vercel AI SDK with 6 providers, including MiniMax | One or more provider keys |
 | `cloudflare-gateway` | Cloudflare AI Gateway (/compat) | `CLOUDFLARE_AI_GATEWAY_ACCOUNT_ID`, `CLOUDFLARE_AI_GATEWAY_ID`, `CLOUDFLARE_AI_GATEWAY_TOKEN` |
+
+**MiniMax setup:**
+
+- Add `MINIMAX_API_KEY` to `.dev.vars` locally, or use `npx wrangler secret put MINIMAX_API_KEY` for deployment.
+- Set `LLM_PROVIDER=ai-sdk` and `LLM_MODEL=minimax/MiniMax-M3.1-Flash`, then restart the Worker. In dashboard settings, choose **AI SDK** and set both research and analyst models to **MiniMax-M3.1-Flash**. `MiniMax-M3` is also available.
+- MiniMax uses the MiniMax-maintained `@minimax-ai/ai-sdk-provider` package through AI SDK's `generateText`, with its default Anthropic-compatible transport (`https://api.minimax.io/anthropic/v1/messages`).
+- The integration separates reasoning from the final answer, allows at least 8,192 output tokens (including reasoning), and rejects truncated, empty, or invalid JSON responses. Requests use a 60-second timeout, medium reasoning effort, and no automatic retries.
+- Dashboard cost estimates use standard, uncached MiniMax API prices. Actual billing can differ with prompt caching or subscription access.
+
+See the [MiniMax AI SDK guide](https://platform.minimax.io/docs/api-reference/text-ai-sdk) and [pricing](https://platform.minimax.io/docs/pricing/overview).
 
 **Optional OpenAI Base URL Override:**
 
@@ -242,6 +259,7 @@ MAHORAGA supports multiple LLM providers via three modes:
 | Google | `GOOGLE_GENERATIVE_AI_API_KEY` | `google/gemini-2.5-pro`, `google/gemini-2.5-flash` |
 | xAI (Grok) | `XAI_API_KEY` | `xai/grok-4`, `xai/grok-3` |
 | DeepSeek | `DEEPSEEK_API_KEY` | `deepseek/deepseek-chat`, `deepseek/deepseek-reasoner` |
+| MiniMax | `MINIMAX_API_KEY` | `minimax/MiniMax-M3.1-Flash`, `minimax/MiniMax-M3` |
 
 **Example: Using Claude with AI SDK:**
 

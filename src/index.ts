@@ -4,9 +4,9 @@ import type { Env } from "./env.d";
 import { handleCronEvent } from "./jobs/cron";
 import { MahoragaMcpAgent } from "./mcp/agent";
 
+export { MahoragaHarness } from "./durable-objects/mahoraga-harness";
 export { SessionDO } from "./durable-objects/session";
 export { MahoragaMcpAgent };
-export { MahoragaHarness } from "./durable-objects/mahoraga-harness";
 
 function constantTimeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -71,7 +71,7 @@ export default {
       if (!isAuthorized(request, env)) {
         return unauthorizedResponse();
       }
-      return MahoragaMcpAgent.mount("/mcp", { binding: "MCP_AGENT" }).fetch(request, env, ctx);
+      return MahoragaMcpAgent.serve("/mcp", { binding: "MCP_AGENT" }).fetch(request, env, ctx);
     }
 
     if (url.pathname.startsWith("/agent")) {

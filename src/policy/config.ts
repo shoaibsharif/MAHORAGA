@@ -31,7 +31,7 @@ export interface OptionsPolicyConfig {
 export interface PolicyConfig {
   max_position_pct_equity: number;
   max_open_positions: number;
-  max_notional_per_trade: number;
+  max_notional_per_trade: number | null;
   allowed_order_types: string[];
   max_daily_loss_pct: number;
   cooldown_minutes_after_loss: number;
@@ -68,7 +68,10 @@ export function getDefaultPolicyConfig(env: Env): PolicyConfig {
   return {
     max_position_pct_equity: parseNumber(env.DEFAULT_MAX_POSITION_PCT, 0.1),
     max_open_positions: parseNumber(env.DEFAULT_MAX_OPEN_POSITIONS, 10),
-    max_notional_per_trade: parseNumber(env.DEFAULT_MAX_NOTIONAL_PER_TRADE, 5000),
+    max_notional_per_trade:
+      env.DEFAULT_MAX_NOTIONAL_PER_TRADE?.trim().toLowerCase() === "none"
+        ? null
+        : parseNumber(env.DEFAULT_MAX_NOTIONAL_PER_TRADE, 5000),
     allowed_order_types: ["market", "limit", "stop", "stop_limit"],
     max_daily_loss_pct: parseNumber(env.DEFAULT_MAX_DAILY_LOSS_PCT, 0.02),
     cooldown_minutes_after_loss: parseNumber(env.DEFAULT_COOLDOWN_MINUTES, 30),
@@ -168,8 +171,13 @@ export function validatePolicyConfig(config: unknown): PolicyConfig {
     throw new Error("max_open_positions must be at least 1");
   }
 
-  if (typeof c.max_notional_per_trade !== "number" || c.max_notional_per_trade <= 0) {
-    throw new Error("max_notional_per_trade must be positive");
+  if (
+    c.max_notional_per_trade !== null &&
+    (typeof c.max_notional_per_trade !== "number" ||
+      !Number.isFinite(c.max_notional_per_trade) ||
+      c.max_notional_per_trade <= 0)
+  ) {
+    throw new Error("max_notional_per_trade must be positive or null");
   }
 
   if (!Array.isArray(c.allowed_order_types) || c.allowed_order_types.length === 0) {

@@ -81,65 +81,81 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
   }
 
   private registerAuthTools(db: ReturnType<typeof createD1Client>, alpaca: ReturnType<typeof createAlpacaProviders>) {
-    this.server.tool("auth-verify", "Verify that Alpaca API credentials are valid", {}, async () => {
-      const startTime = Date.now();
-      try {
-        const account = await alpaca.trading.getAccount();
+    this.server.registerTool(
+      "auth-verify",
+      {
+        description: "Verify that Alpaca API credentials are valid",
+        inputSchema: {},
+      },
+      async () => {
+        const startTime = Date.now();
+        try {
+          const account = await alpaca.trading.getAccount();
+          const result = success({
+            verified: true,
+            account_id: account.id,
+            account_number: account.account_number,
+            status: account.status,
+            paper: this.env.ALPACA_PAPER === "true",
+          });
+          await insertToolLog(db, {
+            request_id: this.requestId,
+            tool_name: "auth-verify",
+            input: {},
+            output: result,
+            latency_ms: Date.now() - startTime,
+            provider_calls: 1,
+          });
+          return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(failure({ code: ErrorCode.UNAUTHORIZED, message: String(error) }), null, 2),
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+    );
+
+    this.server.registerTool(
+      "user-get",
+      {
+        description: "Get user/session information and system configuration",
+        inputSchema: {},
+      },
+      async () => {
         const result = success({
-          verified: true,
-          account_id: account.id,
-          account_number: account.account_number,
-          status: account.status,
-          paper: this.env.ALPACA_PAPER === "true",
-        });
-        await insertToolLog(db, {
-          request_id: this.requestId,
-          tool_name: "auth-verify",
-          input: {},
-          output: result,
-          latency_ms: Date.now() - startTime,
-          provider_calls: 1,
+          environment: this.env.ENVIRONMENT,
+          paper_trading: this.env.ALPACA_PAPER === "true",
+          features: {
+            llm_research: this.env.FEATURE_LLM_RESEARCH === "true",
+            options: this.env.FEATURE_OPTIONS === "true",
+          },
+          policy: {
+            max_position_pct_equity: this.policyConfig!.max_position_pct_equity,
+            max_notional_per_trade: this.policyConfig!.max_notional_per_trade,
+            max_daily_loss_pct: this.policyConfig!.max_daily_loss_pct,
+          },
         });
         return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(failure({ code: ErrorCode.UNAUTHORIZED, message: String(error) }), null, 2),
-            },
-          ],
-          isError: true,
-        };
       }
-    });
-
-    this.server.tool("user-get", "Get user/session information and system configuration", {}, async () => {
-      const result = success({
-        environment: this.env.ENVIRONMENT,
-        paper_trading: this.env.ALPACA_PAPER === "true",
-        features: {
-          llm_research: this.env.FEATURE_LLM_RESEARCH === "true",
-          options: this.env.FEATURE_OPTIONS === "true",
-        },
-        policy: {
-          max_position_pct_equity: this.policyConfig!.max_position_pct_equity,
-          max_notional_per_trade: this.policyConfig!.max_notional_per_trade,
-          max_daily_loss_pct: this.policyConfig!.max_daily_loss_pct,
-        },
-      });
-      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
-    });
+    );
   }
 
   private registerAccountTools(
     db: ReturnType<typeof createD1Client>,
     alpaca: ReturnType<typeof createAlpacaProviders>
   ) {
-    this.server.tool(
+    this.server.registerTool(
       "accounts-get",
-      "Get detailed account information including buying power and equity",
-      {},
+      {
+        description: "Get detailed account information including buying power and equity",
+        inputSchema: {},
+      },
       async () => {
         const startTime = Date.now();
         try {
@@ -168,10 +184,12 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "portfolio-get",
-      "Get comprehensive portfolio snapshot with positions and summary",
-      {},
+      {
+        description: "Get comprehensive portfolio snapshot with positions and summary",
+        inputSchema: {},
+      },
       async () => {
         const startTime = Date.now();
         try {
@@ -236,10 +254,12 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
     db: ReturnType<typeof createD1Client>,
     alpaca: ReturnType<typeof createAlpacaProviders>
   ) {
-    this.server.tool(
+    this.server.registerTool(
       "positions-list",
-      "List all current positions",
-      { symbol: z.string().optional() },
+      {
+        description: "List all current positions",
+        inputSchema: { symbol: z.string().optional() },
+      },
       async ({ symbol }) => {
         try {
           const positions = await alpaca.trading.getPositions();
@@ -274,13 +294,15 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "positions-close",
-      "Close a position (bypasses preview/submit but checks kill switch)",
       {
-        symbol: z.string(),
-        qty: z.number().positive().optional(),
-        percentage: z.number().min(0).max(100).optional(),
+        description: "Close a position (bypasses preview/submit but checks kill switch)",
+        inputSchema: {
+          symbol: z.string(),
+          qty: z.number().positive().optional(),
+          percentage: z.number().min(0).max(100).optional(),
+        },
       },
       async ({ symbol, qty, percentage }) => {
         try {
@@ -327,18 +349,20 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
   }
 
   private registerOrderTools(db: ReturnType<typeof createD1Client>, alpaca: ReturnType<typeof createAlpacaProviders>) {
-    this.server.tool(
+    this.server.registerTool(
       "orders-preview",
-      "Preview order and get approval token. Does NOT execute. Use orders-submit with the token.",
       {
-        symbol: z.string().min(1).max(10),
-        side: z.enum(["buy", "sell"]),
-        qty: z.number().positive().optional(),
-        notional: z.number().positive().optional(),
-        order_type: z.enum(["market", "limit", "stop", "stop_limit"]),
-        limit_price: z.number().positive().optional(),
-        stop_price: z.number().positive().optional(),
-        time_in_force: z.enum(["day", "gtc", "ioc", "fok"]).default("day"),
+        description: "Preview order and get approval token. Does NOT execute. Use orders-submit with the token.",
+        inputSchema: {
+          symbol: z.string().min(1).max(10),
+          side: z.enum(["buy", "sell"]),
+          qty: z.number().positive().optional(),
+          notional: z.number().positive().optional(),
+          order_type: z.enum(["market", "limit", "stop", "stop_limit"]),
+          limit_price: z.number().positive().optional(),
+          stop_price: z.number().positive().optional(),
+          time_in_force: z.enum(["day", "gtc", "ioc", "fok"]).default("day"),
+        },
       },
       async (input) => {
         const startTime = Date.now();
@@ -451,10 +475,12 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "orders-submit",
-      "Execute order with valid approval token from orders-preview",
-      { approval_token: z.string().min(1) },
+      {
+        description: "Execute order with valid approval token from orders-preview",
+        inputSchema: { approval_token: z.string().min(1) },
+      },
       async ({ approval_token }) => {
         const startTime = Date.now();
         try {
@@ -567,12 +593,14 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "orders-list",
-      "List orders",
       {
-        status: z.enum(["open", "closed", "all"]).default("open"),
-        limit: z.number().min(1).max(500).default(50),
+        description: "List orders",
+        inputSchema: {
+          status: z.enum(["open", "closed", "all"]).default("open"),
+          limit: z.number().min(1).max(500).default(50),
+        },
       },
       async ({ status, limit }) => {
         try {
@@ -604,73 +632,89 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool("orders-cancel", "Cancel an order by ID", { order_id: z.string() }, async ({ order_id }) => {
-      try {
-        await alpaca.trading.cancelOrder(order_id);
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(success({ message: `Order ${order_id} cancelled` }), null, 2),
-            },
-          ],
-        };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(failure({ code: ErrorCode.PROVIDER_ERROR, message: String(error) }), null, 2),
-            },
-          ],
-          isError: true,
-        };
+    this.server.registerTool(
+      "orders-cancel",
+      {
+        description: "Cancel an order by ID",
+        inputSchema: { order_id: z.string() },
+      },
+      async ({ order_id }) => {
+        try {
+          await alpaca.trading.cancelOrder(order_id);
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(success({ message: `Order ${order_id} cancelled` }), null, 2),
+              },
+            ],
+          };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(failure({ code: ErrorCode.PROVIDER_ERROR, message: String(error) }), null, 2),
+              },
+            ],
+            isError: true,
+          };
+        }
       }
-    });
+    );
   }
 
   private registerRiskTools(db: ReturnType<typeof createD1Client>, alpaca: ReturnType<typeof createAlpacaProviders>) {
-    this.server.tool("risk-status", "Get current risk status and limits", {}, async () => {
-      try {
-        const [riskState, account, positions] = await Promise.all([
-          getRiskState(db),
-          alpaca.trading.getAccount(),
-          alpaca.trading.getPositions(),
-        ]);
+    this.server.registerTool(
+      "risk-status",
+      {
+        description: "Get current risk status and limits",
+        inputSchema: {},
+      },
+      async () => {
+        try {
+          const [riskState, account, positions] = await Promise.all([
+            getRiskState(db),
+            alpaca.trading.getAccount(),
+            alpaca.trading.getPositions(),
+          ]);
 
-        const totalExposure = positions.reduce((sum, p) => sum + Math.abs(p.market_value), 0);
-        const dailyLossPct = riskState.daily_loss_usd / account.equity;
+          const totalExposure = positions.reduce((sum, p) => sum + Math.abs(p.market_value), 0);
+          const dailyLossPct = riskState.daily_loss_usd / account.equity;
 
-        const result = success({
-          kill_switch: { active: riskState.kill_switch_active, reason: riskState.kill_switch_reason },
-          daily_loss: {
-            usd: riskState.daily_loss_usd,
-            pct: dailyLossPct,
-            limit_pct: this.policyConfig!.max_daily_loss_pct,
-          },
-          cooldown: { active: riskState.cooldown_until ? new Date(riskState.cooldown_until) > new Date() : false },
-          exposure: { total_usd: totalExposure, position_count: positions.length },
-          limits: this.policyConfig,
-        });
-
-        return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(failure({ code: ErrorCode.INTERNAL_ERROR, message: String(error) }), null, 2),
+          const result = success({
+            kill_switch: { active: riskState.kill_switch_active, reason: riskState.kill_switch_reason },
+            daily_loss: {
+              usd: riskState.daily_loss_usd,
+              pct: dailyLossPct,
+              limit_pct: this.policyConfig!.max_daily_loss_pct,
             },
-          ],
-          isError: true,
-        };
-      }
-    });
+            cooldown: { active: riskState.cooldown_until ? new Date(riskState.cooldown_until) > new Date() : false },
+            exposure: { total_usd: totalExposure, position_count: positions.length },
+            limits: this.policyConfig,
+          });
 
-    this.server.tool(
+          return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(failure({ code: ErrorCode.INTERNAL_ERROR, message: String(error) }), null, 2),
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+    );
+
+    this.server.registerTool(
       "kill-switch-enable",
-      "Enable kill switch to halt all trading",
-      { reason: z.string().min(1) },
+      {
+        description: "Enable kill switch to halt all trading",
+        inputSchema: { reason: z.string().min(1) },
+      },
       async ({ reason }) => {
         try {
           await enableKillSwitch(db, reason);
@@ -697,12 +741,14 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "kill-switch-disable",
-      "Disable kill switch (requires secret verification)",
       {
-        confirmation: z.string(),
-        secret_hash: z.string(),
+        description: "Disable kill switch (requires secret verification)",
+        inputSchema: {
+          confirmation: z.string(),
+          secret_hash: z.string(),
+        },
       },
       async ({ confirmation, secret_hash }) => {
         try {
@@ -755,71 +801,87 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
   }
 
   private registerUtilityTools() {
-    this.server.tool("help-usage", "Get help information about using Mahoraga", {}, async () => {
-      const result = success({
-        name: "Mahoraga MCP Trading Server",
-        version: "0.1.0",
-        order_flow: ["1. orders-preview -> get approval_token", "2. orders-submit with token"],
-        quick_start: ["auth-verify", "portfolio-get", "risk-status", "orders-preview", "orders-submit"],
-      });
-      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
-    });
+    this.server.registerTool(
+      "help-usage",
+      {
+        description: "Get help information about using Mahoraga",
+        inputSchema: {},
+      },
+      async () => {
+        const result = success({
+          name: "Mahoraga MCP Trading Server",
+          version: "0.1.0",
+          order_flow: ["1. orders-preview -> get approval_token", "2. orders-submit with token"],
+          quick_start: ["auth-verify", "portfolio-get", "risk-status", "orders-preview", "orders-submit"],
+        });
+        return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
+      }
+    );
 
-    this.server.tool("catalog-list", "List all available tools", {}, async () => {
-      const catalog = [
-        { category: "Auth", tools: ["auth-verify", "user-get"] },
-        { category: "Account", tools: ["accounts-get", "portfolio-get"] },
-        { category: "Positions", tools: ["positions-list", "positions-close"] },
-        { category: "Orders", tools: ["orders-preview", "orders-submit", "orders-list", "orders-cancel"] },
-        { category: "Risk", tools: ["risk-status", "kill-switch-enable", "kill-switch-disable"] },
-        {
-          category: "Memory",
-          tools: [
-            "memory-log-trade",
-            "memory-log-outcome",
-            "memory-query",
-            "memory-summarize",
-            "memory-set-preferences",
-          ],
-        },
-        {
-          category: "Market Data",
-          tools: ["symbol-overview", "prices-bars", "market-clock", "market-movers", "market-quote"],
-        },
-        { category: "Technicals", tools: ["technicals-get", "signals-get", "signals-batch"] },
-        { category: "Events", tools: ["events-ingest", "events-list", "events-classify"] },
-        { category: "News", tools: ["news-list", "news-index"] },
-        { category: "Research", tools: ["symbol-research", "web-scrape-financial"] },
-        {
-          category: "Options",
-          tools: [
-            "options-expirations",
-            "options-chain",
-            "options-snapshot",
-            "options-order-preview",
-            "options-order-submit",
-          ],
-        },
-        { category: "Utility", tools: ["help-usage", "catalog-list"] },
-      ];
-      return { content: [{ type: "text" as const, text: JSON.stringify(success({ catalog }), null, 2) }] };
-    });
+    this.server.registerTool(
+      "catalog-list",
+      {
+        description: "List all available tools",
+        inputSchema: {},
+      },
+      async () => {
+        const catalog = [
+          { category: "Auth", tools: ["auth-verify", "user-get"] },
+          { category: "Account", tools: ["accounts-get", "portfolio-get"] },
+          { category: "Positions", tools: ["positions-list", "positions-close"] },
+          { category: "Orders", tools: ["orders-preview", "orders-submit", "orders-list", "orders-cancel"] },
+          { category: "Risk", tools: ["risk-status", "kill-switch-enable", "kill-switch-disable"] },
+          {
+            category: "Memory",
+            tools: [
+              "memory-log-trade",
+              "memory-log-outcome",
+              "memory-query",
+              "memory-summarize",
+              "memory-set-preferences",
+            ],
+          },
+          {
+            category: "Market Data",
+            tools: ["symbol-overview", "prices-bars", "market-clock", "market-movers", "market-quote"],
+          },
+          { category: "Technicals", tools: ["technicals-get", "signals-get", "signals-batch"] },
+          { category: "Events", tools: ["events-ingest", "events-list", "events-classify"] },
+          { category: "News", tools: ["news-list", "news-index"] },
+          { category: "Research", tools: ["symbol-research", "web-scrape-financial"] },
+          {
+            category: "Options",
+            tools: [
+              "options-expirations",
+              "options-chain",
+              "options-snapshot",
+              "options-order-preview",
+              "options-order-submit",
+            ],
+          },
+          { category: "Utility", tools: ["help-usage", "catalog-list"] },
+        ];
+        return { content: [{ type: "text" as const, text: JSON.stringify(success({ catalog }), null, 2) }] };
+      }
+    );
   }
 
   private registerMemoryTools(db: D1Client) {
-    this.server.tool(
+    this.server.registerTool(
       "memory-log-trade",
-      "Log a trade entry to the journal for later analysis",
       {
-        symbol: z.string().min(1),
-        side: z.enum(["buy", "sell"]),
-        qty: z.number().positive(),
-        entry_price: z.number().positive().optional(),
-        trade_id: z.string().optional(),
-        signals: z.record(z.unknown()).optional(),
-        technicals: z.record(z.unknown()).optional(),
-        regime_tags: z.array(z.string()).optional(),
-        notes: z.string().optional(),
+        description: "Log a trade entry to the journal for later analysis",
+        inputSchema: {
+          symbol: z.string().min(1),
+          side: z.enum(["buy", "sell"]),
+          qty: z.number().positive(),
+          entry_price: z.number().positive().optional(),
+          trade_id: z.string().optional(),
+          signals: z.record(z.string(), z.unknown()).optional(),
+          technicals: z.record(z.string(), z.unknown()).optional(),
+          regime_tags: z.array(z.string()).optional(),
+          notes: z.string().optional(),
+        },
       },
       async (input) => {
         try {
@@ -856,17 +918,19 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "memory-log-outcome",
-      "Log the outcome of a previously logged trade",
       {
-        journal_id: z.string().min(1),
-        exit_price: z.number().positive(),
-        pnl_usd: z.number(),
-        pnl_pct: z.number(),
-        hold_duration_mins: z.number().nonnegative(),
-        outcome: z.enum(["win", "loss", "scratch"]),
-        lessons_learned: z.string().optional(),
+        description: "Log the outcome of a previously logged trade",
+        inputSchema: {
+          journal_id: z.string().min(1),
+          exit_price: z.number().positive(),
+          pnl_usd: z.number(),
+          pnl_pct: z.number(),
+          hold_duration_mins: z.number().nonnegative(),
+          outcome: z.enum(["win", "loss", "scratch"]),
+          lessons_learned: z.string().optional(),
+        },
       },
       async (input) => {
         try {
@@ -896,15 +960,17 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "memory-query",
-      "Query journal entries and trading statistics",
       {
-        symbol: z.string().optional(),
-        outcome: z.enum(["win", "loss", "scratch"]).optional(),
-        regime_tag: z.string().optional(),
-        days: z.number().min(1).max(365).default(30),
-        limit: z.number().min(1).max(100).default(20),
+        description: "Query journal entries and trading statistics",
+        inputSchema: {
+          symbol: z.string().optional(),
+          outcome: z.enum(["win", "loss", "scratch"]).optional(),
+          regime_tag: z.string().optional(),
+          days: z.number().min(1).max(365).default(30),
+          limit: z.number().min(1).max(100).default(20),
+        },
       },
       async (input) => {
         try {
@@ -940,10 +1006,12 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "memory-summarize",
-      "Use LLM to analyze trading history and extract patterns (requires LLM feature)",
-      { days: z.number().min(1).max(365).default(30) },
+      {
+        description: "Use LLM to analyze trading history and extract patterns (requires LLM feature)",
+        inputSchema: { days: z.number().min(1).max(365).default(30) },
+      },
       async (_input) => {
         if (!this.llm) {
           return {
@@ -994,10 +1062,12 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "memory-set-preferences",
-      "Store user trading preferences",
-      { preferences: z.record(z.unknown()) },
+      {
+        description: "Store user trading preferences",
+        inputSchema: { preferences: z.record(z.string(), z.unknown()) },
+      },
       async ({ preferences }) => {
         try {
           await setPreferences(db, preferences);
@@ -1020,29 +1090,38 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool("memory-get-preferences", "Get stored user trading preferences", {}, async () => {
-      try {
-        const preferences = await getPreferences(db);
-        return { content: [{ type: "text" as const, text: JSON.stringify(success({ preferences }), null, 2) }] };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(failure({ code: ErrorCode.INTERNAL_ERROR, message: String(error) }), null, 2),
-            },
-          ],
-          isError: true,
-        };
+    this.server.registerTool(
+      "memory-get-preferences",
+      {
+        description: "Get stored user trading preferences",
+        inputSchema: {},
+      },
+      async () => {
+        try {
+          const preferences = await getPreferences(db);
+          return { content: [{ type: "text" as const, text: JSON.stringify(success({ preferences }), null, 2) }] };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(failure({ code: ErrorCode.INTERNAL_ERROR, message: String(error) }), null, 2),
+              },
+            ],
+            isError: true,
+          };
+        }
       }
-    });
+    );
   }
 
   private registerMarketDataTools(db: D1Client, alpaca: ReturnType<typeof createAlpacaProviders>) {
-    this.server.tool(
+    this.server.registerTool(
       "symbol-overview",
-      "Get comprehensive overview of a symbol including price, position, and recent bars",
-      { symbol: z.string().min(1) },
+      {
+        description: "Get comprehensive overview of a symbol including price, position, and recent bars",
+        inputSchema: { symbol: z.string().min(1) },
+      },
       async ({ symbol }) => {
         const startTime = Date.now();
         try {
@@ -1093,13 +1172,15 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "prices-bars",
-      "Get historical price bars for a symbol",
       {
-        symbol: z.string().min(1),
-        timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
-        limit: z.number().min(1).max(1000).default(100),
+        description: "Get historical price bars for a symbol",
+        inputSchema: {
+          symbol: z.string().min(1),
+          timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
+          limit: z.number().min(1).max(1000).default(100),
+        },
       },
       async ({ symbol, timeframe, limit }) => {
         try {
@@ -1130,27 +1211,36 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool("market-clock", "Get current market clock status", {}, async () => {
-      try {
-        const clock = await alpaca.trading.getClock();
-        return { content: [{ type: "text" as const, text: JSON.stringify(success(clock), null, 2) }] };
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(failure({ code: ErrorCode.PROVIDER_ERROR, message: String(error) }), null, 2),
-            },
-          ],
-          isError: true,
-        };
+    this.server.registerTool(
+      "market-clock",
+      {
+        description: "Get current market clock status",
+        inputSchema: {},
+      },
+      async () => {
+        try {
+          const clock = await alpaca.trading.getClock();
+          return { content: [{ type: "text" as const, text: JSON.stringify(success(clock), null, 2) }] };
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: JSON.stringify(failure({ code: ErrorCode.PROVIDER_ERROR, message: String(error) }), null, 2),
+              },
+            ],
+            isError: true,
+          };
+        }
       }
-    });
+    );
 
-    this.server.tool(
+    this.server.registerTool(
       "market-movers",
-      "Get top gainers and losers from watchlist symbols",
-      { symbols: z.array(z.string()).min(1).max(50) },
+      {
+        description: "Get top gainers and losers from watchlist symbols",
+        inputSchema: { symbols: z.array(z.string()).min(1).max(50) },
+      },
       async ({ symbols }) => {
         try {
           const snapshots = await alpaca.marketData.getSnapshots(symbols.map((s) => s.toUpperCase()));
@@ -1181,10 +1271,12 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "quotes-batch",
-      "Get latest quotes for multiple symbols",
-      { symbols: z.array(z.string()).min(1).max(100) },
+      {
+        description: "Get latest quotes for multiple symbols",
+        inputSchema: { symbols: z.array(z.string()).min(1).max(100) },
+      },
       async ({ symbols }) => {
         try {
           const quotes = await alpaca.marketData.getQuotes(symbols.map((s) => s.toUpperCase()));
@@ -1210,10 +1302,12 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "market-quote",
-      "Get a quote for a single symbol (stocks or crypto)",
-      { symbol: z.string().min(1) },
+      {
+        description: "Get a quote for a single symbol (stocks or crypto)",
+        inputSchema: { symbol: z.string().min(1) },
+      },
       async ({ symbol }) => {
         try {
           let isCrypto = symbol.includes("/");
@@ -1255,12 +1349,14 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
   }
 
   private registerTechnicalTools(_db: D1Client, alpaca: ReturnType<typeof createAlpacaProviders>) {
-    this.server.tool(
+    this.server.registerTool(
       "technicals-get",
-      "Calculate technical indicators for a symbol",
       {
-        symbol: z.string().min(1),
-        timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
+        description: "Calculate technical indicators for a symbol",
+        inputSchema: {
+          symbol: z.string().min(1),
+          timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
+        },
       },
       async ({ symbol, timeframe }) => {
         try {
@@ -1296,12 +1392,14 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "signals-get",
-      "Detect trading signals from technical indicators for a symbol",
       {
-        symbol: z.string().min(1),
-        timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
+        description: "Detect trading signals from technical indicators for a symbol",
+        inputSchema: {
+          symbol: z.string().min(1),
+          timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
+        },
       },
       async ({ symbol, timeframe }) => {
         try {
@@ -1349,12 +1447,14 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "signals-batch",
-      "Detect trading signals for multiple symbols at once",
       {
-        symbols: z.array(z.string()).min(1).max(20),
-        timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
+        description: "Detect trading signals for multiple symbols at once",
+        inputSchema: {
+          symbols: z.array(z.string()).min(1).max(20),
+          timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
+        },
       },
       async ({ symbols, timeframe }) => {
         try {
@@ -1392,13 +1492,15 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
   }
 
   private registerEventsTools(db: D1Client) {
-    this.server.tool(
+    this.server.registerTool(
       "events-ingest",
-      "Manually ingest a raw event for processing",
       {
-        source: z.string().min(1),
-        source_id: z.string().min(1),
-        content: z.string().min(1),
+        description: "Manually ingest a raw event for processing",
+        inputSchema: {
+          source: z.string().min(1),
+          source_id: z.string().min(1),
+          content: z.string().min(1),
+        },
       },
       async ({ source, source_id, content }) => {
         try {
@@ -1425,14 +1527,16 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "events-list",
-      "List structured events with optional filtering",
       {
-        event_type: z.string().optional(),
-        symbol: z.string().optional(),
-        validated: z.boolean().optional(),
-        limit: z.number().min(1).max(100).default(20),
+        description: "List structured events with optional filtering",
+        inputSchema: {
+          event_type: z.string().optional(),
+          symbol: z.string().optional(),
+          validated: z.boolean().optional(),
+          limit: z.number().min(1).max(100).default(20),
+        },
       },
       async (input) => {
         try {
@@ -1461,12 +1565,14 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "events-classify",
-      "Use LLM to classify raw content into structured event (requires LLM feature)",
       {
-        content: z.string().min(1),
-        store: z.boolean().default(true),
+        description: "Use LLM to classify raw content into structured event (requires LLM feature)",
+        inputSchema: {
+          content: z.string().min(1),
+          store: z.boolean().default(true),
+        },
       },
       async ({ content, store }) => {
         if (!this.llm) {
@@ -1519,13 +1625,15 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
   }
 
   private registerNewsTools(db: D1Client) {
-    this.server.tool(
+    this.server.registerTool(
       "news-list",
-      "List recent news items with optional filtering",
       {
-        symbol: z.string().optional(),
-        source: z.string().optional(),
-        limit: z.number().min(1).max(100).default(20),
+        description: "List recent news items with optional filtering",
+        inputSchema: {
+          symbol: z.string().optional(),
+          source: z.string().optional(),
+          limit: z.number().min(1).max(100).default(20),
+        },
       },
       async (input) => {
         try {
@@ -1551,17 +1659,19 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "news-index",
-      "Manually index a news item",
       {
-        source: z.string().min(1),
-        source_id: z.string().min(1),
-        headline: z.string().min(1),
-        summary: z.string().optional(),
-        url: z.string().url().optional(),
-        symbols: z.array(z.string()).default([]),
-        published_at: z.string().optional(),
+        description: "Manually index a news item",
+        inputSchema: {
+          source: z.string().min(1),
+          source_id: z.string().min(1),
+          headline: z.string().min(1),
+          summary: z.string().optional(),
+          url: z.string().url().optional(),
+          symbols: z.array(z.string()).default([]),
+          published_at: z.string().optional(),
+        },
       },
       async (input) => {
         try {
@@ -1598,10 +1708,12 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
   }
 
   private registerResearchTools(db: D1Client, alpaca: ReturnType<typeof createAlpacaProviders>) {
-    this.server.tool(
+    this.server.registerTool(
       "symbol-research",
-      "Generate comprehensive research report for a symbol (requires LLM feature)",
-      { symbol: z.string().min(1) },
+      {
+        description: "Generate comprehensive research report for a symbol (requires LLM feature)",
+        inputSchema: { symbol: z.string().min(1) },
+      },
       async ({ symbol }) => {
         const startTime = Date.now();
         if (!this.llm) {
@@ -1672,12 +1784,15 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "web-scrape-financial",
-      "Scrape financial data from allowed domains (finance.yahoo.com, sec.gov, stockanalysis.com, companiesmarketcap.com)",
       {
-        url: z.string().url(),
-        symbol: z.string().optional(),
+        description:
+          "Scrape financial data from allowed domains (finance.yahoo.com, sec.gov, stockanalysis.com, companiesmarketcap.com)",
+        inputSchema: {
+          url: z.string().url(),
+          symbol: z.string().optional(),
+        },
       },
       async ({ url, symbol }) => {
         if (!isAllowedDomain(url)) {
@@ -1722,10 +1837,12 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
   }
 
   private registerOptionsTools() {
-    this.server.tool(
+    this.server.registerTool(
       "options-expirations",
-      "Get available option expiration dates for a symbol",
-      { underlying: z.string().min(1) },
+      {
+        description: "Get available option expiration dates for a symbol",
+        inputSchema: { underlying: z.string().min(1) },
+      },
       async ({ underlying }) => {
         if (!this.options || !this.options.isConfigured()) {
           return {
@@ -1766,12 +1883,14 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "options-chain",
-      "Get options chain for a symbol and expiration",
       {
-        underlying: z.string().min(1),
-        expiration: z.string().min(1),
+        description: "Get options chain for a symbol and expiration",
+        inputSchema: {
+          underlying: z.string().min(1),
+          expiration: z.string().min(1),
+        },
       },
       async ({ underlying, expiration }) => {
         if (!this.options || !this.options.isConfigured()) {
@@ -1806,10 +1925,12 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "options-snapshot",
-      "Get current snapshot for an options contract",
-      { contract_symbol: z.string().min(1) },
+      {
+        description: "Get current snapshot for an options contract",
+        inputSchema: { contract_symbol: z.string().min(1) },
+      },
       async ({ contract_symbol }) => {
         if (!this.options || !this.options.isConfigured()) {
           return {
@@ -1843,16 +1964,19 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "options-order-preview",
-      "Preview options order and get approval token. Does NOT execute. Use options-order-submit with the token.",
       {
-        contract_symbol: z.string().min(1),
-        side: z.enum(["buy", "sell"]),
-        qty: z.number().int().positive(),
-        order_type: z.enum(["market", "limit"]),
-        limit_price: z.number().positive().optional(),
-        time_in_force: z.enum(["day", "gtc"]).default("day"),
+        description:
+          "Preview options order and get approval token. Does NOT execute. Use options-order-submit with the token.",
+        inputSchema: {
+          contract_symbol: z.string().min(1),
+          side: z.enum(["buy", "sell"]),
+          qty: z.number().int().positive(),
+          order_type: z.enum(["market", "limit"]),
+          limit_price: z.number().positive().optional(),
+          time_in_force: z.enum(["day", "gtc"]).default("day"),
+        },
       },
       async (input) => {
         const startTime = Date.now();
@@ -1987,10 +2111,12 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       }
     );
 
-    this.server.tool(
+    this.server.registerTool(
       "options-order-submit",
-      "Execute options order with valid approval token from options-order-preview",
-      { approval_token: z.string().min(1) },
+      {
+        description: "Execute options order with valid approval token from options-order-preview",
+        inputSchema: { approval_token: z.string().min(1) },
+      },
       async ({ approval_token }) => {
         const startTime = Date.now();
         const db = createD1Client(this.env.DB);

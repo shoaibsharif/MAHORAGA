@@ -10,6 +10,7 @@ export interface Env {
   ALPACA_PAPER?: string;
   OPENAI_API_KEY?: string;
   OPENAI_BASE_URL?: string;
+  MINIMAX_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
   GOOGLE_GENERATIVE_AI_API_KEY?: string;
   XAI_API_KEY?: string;

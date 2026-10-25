@@ -8,7 +8,9 @@ export const AgentConfigSchema = z
     premarket_plan_window_minutes: z.number().min(1).max(60),
     market_open_execute_window_minutes: z.number().min(0).max(10),
 
-    max_position_value: z.number().positive().max(100000),
+    max_position_value: z.number().positive().max(100000).nullable(),
+    min_trade_notional: z.number().min(1).max(100000).default(1),
+    starting_equity: z.number().positive().default(100),
     max_positions: z.number().int().min(1).max(50),
     min_sentiment_score: z.number().min(0).max(1),
     min_analyst_confidence: z.number().min(0).max(1),
@@ -50,6 +52,10 @@ export const AgentConfigSchema = z
 
     ticker_blacklist: z.array(z.string()),
     allowed_exchanges: z.array(z.string()),
+  })
+  .refine((data) => data.max_position_value === null || data.min_trade_notional <= data.max_position_value, {
+    message: "min_trade_notional must not exceed max_position_value",
+    path: ["min_trade_notional"],
   })
   .refine((data) => data.options_min_delta < data.options_max_delta, {
     message: "options_min_delta must be less than options_max_delta",

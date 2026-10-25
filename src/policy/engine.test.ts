@@ -305,6 +305,14 @@ describe("PolicyEngine", () => {
   });
 
   describe("notional limits", () => {
+    it("removes only the dollar cap when configured as null", () => {
+      engine = new PolicyEngine(createTestConfig({ max_notional_per_trade: null }));
+      const allowed = engine.evaluate(createTestContext({ order: createTestOrder({ notional: 6000 }) }));
+      expect(allowed.allowed).toBe(true);
+      const blocked = engine.evaluate(createTestContext({ order: createTestOrder({ notional: 11000 }) }));
+      expect(blocked.violations.some((v) => v.rule === "max_position_pct")).toBe(true);
+      expect(blocked.violations.some((v) => v.rule === "max_notional")).toBe(false);
+    });
     it("blocks orders exceeding max notional", () => {
       const ctx = createTestContext({
         order: createTestOrder({ notional: 15000 }),

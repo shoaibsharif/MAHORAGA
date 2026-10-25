@@ -55,7 +55,8 @@ export interface Config {
   analyst_interval_ms: number
   premarket_plan_window_minutes?: number
   market_open_execute_window_minutes?: number
-  max_position_value: number
+  max_position_value: number | null
+  min_trade_notional: number
   max_positions: number
   min_sentiment_score: number
   min_analyst_confidence: number
@@ -192,6 +193,7 @@ export interface PositionHistory {
 }
 
 export interface Status {
+  riskLimits?: { max_position_pct_equity: number; max_notional_per_trade: number | null; use_cash_only: boolean }
   account: Account | null
   positions: Position[]
   clock: Clock | null

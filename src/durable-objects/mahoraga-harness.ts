@@ -35,6 +35,7 @@ import {
   isTwitterEnabled,
 } from "../strategy/default/gatherers/twitter";
 import { isCryptoSymbol, normalizeCryptoSymbol } from "../strategy/default/helpers/crypto";
+import { getEntryNotional } from "../strategy/default/helpers/position-sizing";
 import { tickerCache } from "../strategy/default/helpers/ticker";
 import { runCryptoTrading } from "../strategy/default/rules/crypto-trading";
 import { findBestOptionsContract } from "../strategy/default/rules/options";
@@ -852,12 +853,8 @@ export class MahoragaHarness extends DurableObject<Env> {
         if (heldSymbols.has(rec.symbol)) continue;
         if (entrySymbols.has(rec.symbol)) continue;
 
-        const sizePct = Math.min(20, this.state.config.position_size_pct_of_cash);
-        const notional = Math.min(
-          account.cash * (sizePct / 100) * rec.confidence,
-          this.state.config.max_position_value
-        );
-        if (notional < 100) continue;
+        const notional = getEntryNotional(account, rec.confidence, this.state.config);
+        if (notional === 0) continue;
 
         const result = await ctx.broker.buy(rec.symbol, notional, rec.reasoning);
         if (result) {
@@ -1002,12 +999,8 @@ export class MahoragaHarness extends DurableObject<Env> {
         if (heldSymbols.has(rec.symbol)) continue;
         if (positions.length >= this.state.config.max_positions) break;
 
-        const sizePct = Math.min(20, this.state.config.position_size_pct_of_cash);
-        const notional = Math.min(
-          account.cash * (sizePct / 100) * rec.confidence,
-          this.state.config.max_position_value
-        );
-        if (notional < 100) continue;
+        const notional = getEntryNotional(account, rec.confidence, this.state.config);
+        if (notional === 0) continue;
 
         const result = await ctx.broker.buy(rec.symbol, notional, `Pre-market plan: ${rec.reasoning}`);
         if (result) {
@@ -1165,6 +1158,7 @@ export class MahoragaHarness extends DurableObject<Env> {
       ok: true,
       data: {
         enabled: this.state.enabled,
+        riskLimits: getDefaultPolicyConfig(this.env),
         strategy: activeStrategy.name,
         account,
         positions,
@@ -1295,8 +1289,10 @@ export class MahoragaHarness extends DurableObject<Env> {
     const pricing: Record<string, { input: number; output: number }> = {
       "gpt-4o": { input: 2.5, output: 10 },
       "gpt-4o-mini": { input: 0.15, output: 0.6 },
+      "MiniMax-M3.1-Flash": { input: 0.15, output: 0.6 },
+      "MiniMax-M3": { input: tokensIn > 512_000 ? 0.6 : 0.3, output: tokensIn > 512_000 ? 2.4 : 1.2 },
     };
-    const rates = pricing[model] ?? pricing["gpt-4o"]!;
+    const rates = pricing[model.replace(/^minimax[:/]/, "")] ?? pricing["gpt-4o"]!;
     const cost = (tokensIn * rates.input + tokensOut * rates.output) / 1_000_000;
 
     this.state.costTracker.total_usd += cost;

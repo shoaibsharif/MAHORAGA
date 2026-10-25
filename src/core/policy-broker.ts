@@ -98,16 +98,24 @@ export function createPolicyBroker(deps: PolicyBrokerDeps): StrategyContext["bro
     const orderSymbol = isCrypto ? normalizeCryptoSymbol(symbol) : symbol;
     const assetClass = isCrypto ? "crypto" : "us_equity";
     const timeInForce = isCrypto ? "gtc" : "day";
+    if (!isCrypto && notional < 1) {
+      log("PolicyBroker", "buy_blocked", { symbol, reason: "Stock buys require at least $1" });
+      return false;
+    }
 
     // Exchange validation for equities
-    if (!isCrypto && deps.allowedExchanges.length > 0) {
+    if (!isCrypto) {
       try {
         const asset = await alpaca.trading.getAsset(symbol);
         if (!asset) {
           log("PolicyBroker", "buy_blocked", { symbol, reason: "Asset not found" });
           return false;
         }
-        if (!deps.allowedExchanges.includes(asset.exchange)) {
+        if (!asset.tradable || !asset.fractionable) {
+          log("PolicyBroker", "buy_blocked", { symbol, reason: "Asset does not support tradable fractional orders" });
+          return false;
+        }
+        if (deps.allowedExchanges.length > 0 && !deps.allowedExchanges.includes(asset.exchange)) {
           log("PolicyBroker", "buy_blocked", {
             symbol,
             reason: "Exchange not allowed",

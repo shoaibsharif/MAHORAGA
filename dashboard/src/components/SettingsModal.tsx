@@ -11,6 +11,7 @@ interface SettingsModalProps {
 export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
   const [localConfig, setLocalConfig] = useState<Config>(config)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [apiToken, setApiToken] = useState(localStorage.getItem('mahoraga_api_token') || '')
 
   // Note: We intentionally do NOT sync localConfig with the config prop after initial mount.
@@ -31,9 +32,12 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
 
   const handleSave = async () => {
     setSaving(true)
+    setError(null)
     try {
       await onSave(localConfig)
       onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save configuration')
     } finally {
       setSaving(false)
     }
@@ -76,12 +80,29 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
             <h3 className="hud-label mb-3 text-hud-primary">Position Limits</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="hud-label block mb-1">Max Position Value ($)</label>
+                <label htmlFor="max-position-value" className="hud-label block mb-1">Position Dollar Cap (Optional)</label>
                 <input
+                  id="max-position-value"
                   type="number"
+                  min="1"
                   className="hud-input w-full"
-                  value={localConfig.max_position_value}
-                  onChange={e => handleChange('max_position_value', Number(e.target.value))}
+                  value={localConfig.max_position_value ?? ''}
+                  placeholder="No dollar cap"
+                  aria-describedby="position-dollar-cap-help"
+                  onChange={e => handleChange('max_position_value', e.target.value === '' ? null : Number(e.target.value))}
+                />
+                <p id="position-dollar-cap-help" className="text-[9px] text-hud-text-dim mt-1">Leave blank to use percentage and cash limits.</p>
+              </div>
+              <div>
+                <label htmlFor="min-trade-notional" className="hud-label block mb-1">Minimum Entry ($)</label>
+                <input
+                  id="min-trade-notional"
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  className="hud-input w-full"
+                  value={localConfig.min_trade_notional ?? 1}
+                  onChange={e => handleChange('min_trade_notional', Number(e.target.value))}
                 />
               </div>
               <div>
@@ -220,7 +241,7 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                   onChange={e => handleChange('llm_provider', e.target.value as Config['llm_provider'])}
                 >
                   <option value="openai-raw">OpenAI Direct (default)</option>
-                  <option value="ai-sdk">AI SDK (5 providers)</option>
+                  <option value="ai-sdk">AI SDK (6 providers)</option>
                   <option value="cloudflare-gateway">Cloudflare AI Gateway</option>
                   {localConfig.llm_provider &&
                     !['openai-raw', 'ai-sdk', 'cloudflare-gateway'].includes(localConfig.llm_provider) && (
@@ -228,7 +249,7 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                     )}
                 </select>
                 <p className="text-[9px] text-hud-text-dim mt-1">
-                  {localConfig.llm_provider === 'ai-sdk' && 'Supports: OpenAI, Anthropic, Google, xAI, DeepSeek'}
+                  {localConfig.llm_provider === 'ai-sdk' && 'Supports: OpenAI, Anthropic, Google, xAI, DeepSeek, MiniMax'}
                   {(!localConfig.llm_provider || localConfig.llm_provider === 'openai-raw') && 'Uses OPENAI_API_KEY directly (+ optional OPENAI_BASE_URL).'}
                   {localConfig.llm_provider &&
                     !['openai-raw', 'ai-sdk', 'cloudflare-gateway'].includes(localConfig.llm_provider) &&
@@ -290,6 +311,12 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                     !['openai-raw', 'ai-sdk', 'cloudflare-gateway'].includes(localConfig.llm_provider) && (
                       <option value={localConfig.llm_model}>{localConfig.llm_model}</option>
                     )}
+                  {localConfig.llm_provider === 'ai-sdk' && (
+                    <optgroup label="MiniMax">
+                      <option value="minimax/MiniMax-M3.1-Flash">MiniMax-M3.1-Flash</option>
+                      <option value="minimax/MiniMax-M3">MiniMax-M3</option>
+                    </optgroup>
+                  )}
                 </select>
               </div>
               <div>
@@ -359,6 +386,12 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                         {localConfig.llm_analyst_model || 'gpt-4o'}
                       </option>
                     )}
+                  {localConfig.llm_provider === 'ai-sdk' && (
+                    <optgroup label="MiniMax">
+                      <option value="minimax/MiniMax-M3.1-Flash">MiniMax-M3.1-Flash</option>
+                      <option value="minimax/MiniMax-M3">MiniMax-M3</option>
+                    </optgroup>
+                  )}
                 </select>
               </div>
             </div>
@@ -373,7 +406,7 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                 <input
                   type="number"
                   className="hud-input w-full"
-                  value={localConfig.starting_equity || 100000}
+                  value={localConfig.starting_equity ?? 100}
                   onChange={e => handleChange('starting_equity', Number(e.target.value))}
                 />
                 <p className="text-xs text-hud-text-dim mt-1">For P&L calculation</p>
@@ -595,6 +628,7 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
           </div>
 
           {/* Actions */}
+          {error && <p role="alert" className="text-sm text-hud-error">{error}</p>}
           <div className="flex justify-end gap-4 pt-4 border-t border-hud-line">
             <button className="hud-button" onClick={onClose}>
               Cancel

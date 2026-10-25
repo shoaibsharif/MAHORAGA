@@ -7,6 +7,7 @@
 
 import type { Account, Position, ResearchResult } from "../../../core/types";
 import type { BuyCandidate, StrategyContext } from "../../types";
+import { getEntryNotional } from "../helpers/position-sizing";
 
 /**
  * Select entry candidates from LLM-researched signals.
@@ -33,10 +34,8 @@ export function selectEntries(
   for (const r of buyResearch.slice(0, 3)) {
     if (positions.length + candidates.length >= ctx.config.max_positions) break;
 
-    const sizePct = Math.min(20, ctx.config.position_size_pct_of_cash);
-    const notional = Math.min(account.cash * (sizePct / 100) * r.confidence, ctx.config.max_position_value);
-
-    if (notional < 100) continue;
+    const notional = getEntryNotional(account, r.confidence, ctx.config);
+    if (notional === 0) continue;
 
     const shouldUseOptions =
       ctx.config.options_enabled &&
