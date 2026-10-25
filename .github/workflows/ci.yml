@@ -33,7 +33,7 @@ jobs:
 
   deploy:
     needs: test
-    if: github.repository == 'shoaibsharif/MAHORAGA' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.repository == 'shoaibsharif/MAHORAGA' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.CLOUDFLARE_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
