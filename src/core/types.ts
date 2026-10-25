@@ -101,6 +101,8 @@ export interface ResearchResult {
   red_flags: string[];
   catalysts: string[];
   timestamp: number;
+  halal?: import("../providers/halal").HalalReport;
+  fundamentals?: import("../providers/fundamentals").FundamentalContext;
 }
 
 export interface TwitterConfirmation {
@@ -148,6 +150,9 @@ export interface AgentState {
   lastResearchRun: number;
   lastPositionResearchRun: number;
   signalResearch: Record<string, ResearchResult>;
+  halalReports: Record<string, import("../providers/halal").HalalReport>;
+  fundamentalResearch: Record<string, import("../providers/fundamentals").FundamentalContext>;
+  lastHalalReviewRun: number;
   positionResearch: Record<string, unknown>;
   stalenessAnalysis: Record<string, unknown>;
   twitterConfirmations: Record<string, TwitterConfirmation>;

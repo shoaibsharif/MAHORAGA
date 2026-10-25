@@ -441,10 +441,12 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                     type="checkbox"
                     className="hud-input w-4 h-4"
                     checked={localConfig.options_enabled || false}
+                    disabled
                     onChange={(e) => handleChange("options_enabled", e.target.checked)}
                   />
                   <span className="hud-label">Enable Options Trading</span>
                 </label>
+                <p className="text-sm text-hud-text-dim mt-1">Unavailable in this individual-stock halal portfolio.</p>
               </div>
               <div>
                 <label className="hud-label block mb-1">Min Confidence (0-1)</label>
@@ -532,12 +534,13 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                     type="checkbox"
                     className="hud-input w-4 h-4"
                     checked={localConfig.crypto_enabled || false}
+                    disabled
                     onChange={(e) => handleChange("crypto_enabled", e.target.checked)}
                   />
                   <span className="hud-label">Enable Crypto Trading</span>
                 </label>
                 <p className="text-[9px] text-hud-text-dim mt-1">
-                  Trade crypto 24/7 based on momentum. Alpaca supports 20+ coins.
+                  Unavailable in this individual-stock halal portfolio.
                 </p>
               </div>
               <div>

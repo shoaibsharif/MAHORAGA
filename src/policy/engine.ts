@@ -29,6 +29,7 @@ import type {
   PolicyViolation,
   PolicyWarning,
 } from "../mcp/types";
+import { type HalalReport, halalBlockReason } from "../providers/halal";
 import type { Account, MarketClock, Position } from "../providers/types";
 import type { RiskState } from "../storage/d1/queries/risk-state";
 import type { OptionsStrategy, PolicyConfig } from "./config";
@@ -39,6 +40,7 @@ export interface PolicyContext {
   positions: Position[];
   clock: MarketClock;
   riskState: RiskState;
+  halal?: HalalReport;
 }
 
 export interface OptionsPolicyContext {
@@ -57,6 +59,19 @@ export class PolicyEngine {
     const warnings: PolicyWarning[] = [];
 
     this.checkKillSwitch(ctx, violations);
+    if (ctx.order.side === "buy") {
+      const reason =
+        ctx.order.asset_class !== "us_equity"
+          ? "Only screened individual company stocks can be purchased"
+          : halalBlockReason(ctx.halal, ctx.order.symbol);
+      if (reason)
+        violations.push({
+          rule: "halal_eligibility",
+          message: reason,
+          current_value: ctx.halal?.status ?? "unknown",
+          limit_value: "current compliant individual stock",
+        });
+    }
     this.checkCooldown(ctx, violations);
     this.checkDailyLossLimit(ctx, violations);
     this.checkTradingHours(ctx, violations, warnings);
@@ -285,6 +300,13 @@ export class PolicyEngine {
   evaluateOptionsOrder(ctx: OptionsPolicyContext): OptionsPolicyResult {
     const violations: PolicyViolation[] = [];
     const warnings: PolicyWarning[] = [];
+    if (ctx.order.side === "buy")
+      violations.push({
+        rule: "halal_eligibility",
+        message: "Options are outside this individual-stock halal portfolio",
+        current_value: "option",
+        limit_value: "individual stock",
+      });
 
     this.checkKillSwitch(ctx as unknown as PolicyContext, violations);
     this.checkCooldown(ctx as unknown as PolicyContext, violations);

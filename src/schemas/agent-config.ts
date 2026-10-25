@@ -53,6 +53,14 @@ export const AgentConfigSchema = z
     ticker_blacklist: z.array(z.string()),
     allowed_exchanges: z.array(z.string()),
   })
+  .refine((data) => !data.options_enabled, {
+    message: "Options must remain disabled in this individual-stock halal portfolio",
+    path: ["options_enabled"],
+  })
+  .refine((data) => !data.crypto_enabled, {
+    message: "Crypto must remain disabled in this individual-stock halal portfolio",
+    path: ["crypto_enabled"],
+  })
   .refine((data) => data.max_position_value === null || data.min_trade_notional <= data.max_position_value, {
     message: "min_trade_notional must not exceed max_position_value",
     path: ["min_trade_notional"],

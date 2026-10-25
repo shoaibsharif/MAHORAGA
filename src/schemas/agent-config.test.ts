@@ -86,6 +86,11 @@ describe("AgentConfigSchema", () => {
   });
 
   describe("invalid configurations", () => {
+    it.each(["options_enabled", "crypto_enabled"] as const)("rejects enabling %s in the stock portfolio", (field) => {
+      const result = AgentConfigSchema.safeParse({ ...createValidConfig(), [field]: true });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.error.issues.some((issue) => issue.path[0] === field)).toBe(true);
+    });
     it("rejects sub-dollar entry minimums and minimums above a fixed position cap", () => {
       expect(AgentConfigSchema.safeParse({ ...createValidConfig(), min_trade_notional: 0.5 }).success).toBe(false);
       expect(

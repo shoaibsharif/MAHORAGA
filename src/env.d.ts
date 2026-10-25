@@ -22,6 +22,7 @@ export interface Env {
   LLM_MODEL?: string;
   TWITTER_BEARER_TOKEN?: string;
   DISCORD_WEBHOOK_URL?: string;
+  SEC_USER_AGENT?: string;
   MAHORAGA_API_TOKEN: string;
   KILL_SWITCH_SECRET: string;
 

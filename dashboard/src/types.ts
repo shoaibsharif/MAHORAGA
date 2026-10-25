@@ -202,6 +202,7 @@ export interface Sleeve {
 }
 
 export interface Status {
+  halalReports?: Record<string, HalalReport>;
   riskLimits?: { max_position_pct_equity: number; max_notional_per_trade: number | null; use_cash_only: boolean };
   sleeve?: Sleeve;
   account: Account | null;
@@ -222,4 +223,18 @@ export interface Status {
   premarketPlan?: PremarketPlan | null;
   stalenessAnalysis?: Record<string, StalenessAnalysis>;
   overnightActivity?: OvernightActivity;
+}
+
+export interface HalalReport {
+  symbol: string;
+  name: string | null;
+  provider: string;
+  methodology: string;
+  status: "compliant" | "non_compliant" | "questionable" | "unknown" | "stale" | "unsupported";
+  screenedAt: string | null;
+  expiresAt: string;
+  sourceUrl: string;
+  reasons: string[];
+  metrics: { debtRatio: number | null; cashRatio: number | null; prohibitedRevenueRatio: number | null };
+  purificationRatio: number | null;
 }

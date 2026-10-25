@@ -2,8 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 import type { Env } from "../env.d";
 import { getDefaultPolicyConfig } from "../policy/config";
 import type { AlpacaProviders } from "../providers/alpaca";
+import { type HalalReport, unknownHalalReport } from "../providers/halal";
 import type { D1Client } from "../storage/d1/client";
 import { createPolicyBroker } from "./policy-broker";
+
+function screenedStock(symbol: string): HalalReport {
+  return {
+    ...unknownHalalReport(symbol, "Test screening evidence"),
+    status: "compliant",
+    assetType: "stock",
+    screenedAt: new Date().toISOString(),
+  };
+}
 
 function setup(fractionable = true) {
   const createOrder = vi.fn().mockResolvedValue({ status: "new" });
@@ -23,11 +33,34 @@ function setup(fractionable = true) {
     log: vi.fn(),
     cryptoSymbols: [],
     allowedExchanges: ["NASDAQ"],
+    screening: { screen: async (symbol) => screenedStock(symbol) },
   });
   return { broker, createOrder };
 }
 
 describe("small-account stock orders", () => {
+  it("never submits a buy when no screening service has supplied evidence", async () => {
+    const createOrder = vi.fn();
+    const alpaca = {
+      trading: {
+        getAsset: vi.fn().mockResolvedValue({ tradable: true, fractionable: true, exchange: "NASDAQ" }),
+        getAccount: vi.fn().mockResolvedValue({ cash: 100, equity: 100, buying_power: 100 }),
+        getPositions: vi.fn().mockResolvedValue([]),
+        getClock: vi.fn().mockResolvedValue({ is_open: true }),
+        createOrder,
+      },
+    } as unknown as AlpacaProviders;
+    const broker = createPolicyBroker({
+      alpaca,
+      policyConfig: getDefaultPolicyConfig({} as Env),
+      db: null,
+      log: vi.fn(),
+      cryptoSymbols: [],
+      allowedExchanges: ["NASDAQ"],
+    });
+    expect(await broker.buy("UNSCREENED", 8, "LLM says BUY with 100% confidence")).toBe(false);
+    expect(createOrder).not.toHaveBeenCalled();
+  });
   it("sends dollars, not whole-share quantities, for fractional entries", async () => {
     const { broker, createOrder } = setup();
     expect(await broker.buy("TEST", 8, "test signal")).toBe(true);
@@ -133,6 +166,7 @@ function setupSleeve(options: { maxPositionPct?: number; positions?: Array<Recor
     log: vi.fn(),
     cryptoSymbols: [],
     allowedExchanges: ["NASDAQ"],
+    screening: { screen: async (symbol) => screenedStock(symbol) },
     sleeve: {
       getStartingEquity: () => 100,
       getRealizedPnl: () => realizedPnl,

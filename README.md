@@ -6,7 +6,7 @@ An autonomous, LLM-powered trading agent that runs 24/7 on Cloudflare Workers.
 
 [![Discord](https://img.shields.io/discord/1467592472158015553?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/vMFnHe2YBh)
 
-MAHORAGA monitors social sentiment from StockTwits and Reddit, uses AI (OpenAI, Anthropic, Google, xAI, DeepSeek, MiniMax via AI SDK) to analyze signals, and executes trades through Alpaca. It runs as a Cloudflare Durable Object with persistent state, automatic restarts, and 24/7 crypto trading support.
+MAHORAGA dynamically discovers stock candidates from StockTwits, Reddit and SEC signals, checks dated Sharia screening evidence, uses AI to research eligible companies, and executes individual-stock trades through Alpaca. It runs as a Cloudflare Durable Object with persistent state and automatic restarts.
 
 <img width="1278" height="957" alt="dashboard" src="https://github.com/user-attachments/assets/56473ab6-e2c6-45fc-9e32-cf85e69f1a2d" />
 
@@ -15,8 +15,8 @@ MAHORAGA monitors social sentiment from StockTwits and Reddit, uses AI (OpenAI, 
 - **24/7 Operation** — Runs on Cloudflare Workers, no local machine required
 - **Multi-Source Signals** — StockTwits, Reddit (4 subreddits), Twitter confirmation
 - **Multi-Provider LLM** — OpenAI, Anthropic, Google, xAI, DeepSeek, MiniMax via AI SDK or Cloudflare AI Gateway
-- **Crypto Trading** — Trade BTC, ETH, SOL around the clock
-- **Options Support** — High-conviction options plays
+- **Dynamic Halal Screening** — Dated AAOIFI screening evidence with purchase enforcement across autonomous and MCP orders
+- **Financial Research** — Public SEC financial facts and filing links supplied to the research model
 - **Staleness Detection** — Auto-exit positions that lose momentum
 - **Pre-Market Analysis** — Prepare trading plans before market open
 - **Discord Notifications** — Get alerts on BUY signals
@@ -30,6 +30,18 @@ MAHORAGA monitors social sentiment from StockTwits and Reddit, uses AI (OpenAI, 
 - LLM API key (OpenAI, Anthropic, Google, xAI, DeepSeek, MiniMax) or Cloudflare AI Gateway credentials
 
 Both npm lockfiles contain the verified dependency versions. Cloudflare Agents currently requires MCP SDK `1.32.1`; keep that version aligned with its peer dependency. The Miniflare-scoped `undici` override selects patched `7.30.1` because the current Wrangler release still pins an affected version. Recheck the override when updating Wrangler ([advisory](https://github.com/advisories/GHSA-xjj6-f33q-929c)).
+
+## Dynamic halal stock portfolio
+
+There is no fixed company list, fund allocation, or SPUS membership requirement. The existing gatherers discover candidates, and the agent screens candidates before spending LLM tokens on research. It scans up to 20 candidate symbols per research cycle to find eligible opportunities, then sizes purchases from the trading sleeve. Holding cash is valid when no candidates qualify.
+
+Screening uses the public [HalalScreener badge API](https://halalscreener.app/en/widget), which currently requires no API key and documents a 60-request/minute limit. Its dated AAOIFI Standard 21 verdict is an external provider assessment, not a religious certification or a claim that all screening authorities agree. The app requires a matching symbol, an individual-stock asset type, and a compliant verdict. Missing dates, provider errors, questionable results, inconsistent published ratios, funds, crypto and derivatives block purchases. A provider assessment expires after eight days; fetched evidence is refreshed at least hourly. Repeated unknown/error results are briefly cached to limit retry traffic. A changed provider response or format fails closed.
+
+The policy engine checks screening evidence immediately before autonomous purchases. MCP order previews include the evidence, and submission rechecks screening and current risk limits, so an old approval token cannot bypass a failed screen. Selling an owned position does not require a passing screen. Legacy options and crypto settings are disabled on hydration and cannot be enabled through agent configuration. Existing holdings are reviewed hourly and status changes are logged; a screening failure does not trigger an automatic liquidation or invent a disposal deadline.
+
+Research includes the screening ratios available from the free response and [SEC company financial facts and filing metadata](https://www.sec.gov/search-filings/edgar-application-programming-interfaces). Set `SEC_USER_AGENT` to identify your application and contact email. Financial figures keep their original periods, concept names and filing dates. Unsupported taxonomies or inaccessible filings remain explicitly unavailable; linked filing contents are not represented as having been reviewed. The free screening feed does not provide a purification rate, so the dashboard displays it as unavailable rather than assuming zero.
+
+The **Halal Screening** dashboard panel shows evidence, dates, rejection reasons, available ratios and source links. The MCP `halal-screen` tool returns the same evidence for any supplied stock symbol. No screening subscription or database migration is required. Brokerage and LLM credentials are still required for their respective services.
 
 ## Quick Start
 

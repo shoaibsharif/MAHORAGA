@@ -9,6 +9,8 @@ import { getDefaultPolicyConfig, type PolicyConfig } from "../policy/config";
 import { PolicyEngine } from "../policy/engine";
 import { createAlpacaProviders } from "../providers/alpaca";
 import { getDTE } from "../providers/alpaca/options";
+import { getFundamentalContext } from "../providers/fundamentals";
+import { HalalScreeningService } from "../providers/halal";
 import { classifyEvent, generateResearchReport, summarizeLearnedRules } from "../providers/llm/classifier";
 import { createLLMProvider } from "../providers/llm/factory";
 import { extractFinancialData, isAllowedDomain, scrapeUrl } from "../providers/scraper";
@@ -49,6 +51,11 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
 
   private llm: LLMProvider | null = null;
   private options: OptionsProvider | null = null;
+  private screening: HalalScreeningService | null = null;
+
+  private getScreening(): HalalScreeningService {
+    return (this.screening ??= new HalalScreeningService(this.env.CACHE));
+  }
 
   async init() {
     this.requestId = generateId();
@@ -434,7 +441,8 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
           };
 
           const policyEngine = new PolicyEngine(this.policyConfig!);
-          const policyResult = policyEngine.evaluate({ order: preview, account, positions, clock, riskState });
+          const halal = input.side === "buy" ? await this.getScreening().screen(preview.symbol) : undefined;
+          const policyResult = policyEngine.evaluate({ order: preview, account, positions, clock, riskState, halal });
 
           if (policyResult.allowed) {
             const approval = await generateApprovalToken({
@@ -449,7 +457,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
             policyResult.expires_at = approval.expires_at;
           }
 
-          const result = success({ preview, policy: policyResult });
+          const result = success({ preview, policy: policyResult, halal });
 
           await insertToolLog(db, {
             request_id: this.requestId,
@@ -526,7 +534,35 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
           }
 
           const orderParams = validation.order_params!;
+          const halal = orderParams.side === "buy" ? await this.getScreening().screen(orderParams.symbol) : undefined;
+          const [account, positions, currentRisk] = await Promise.all([
+            alpaca.trading.getAccount(),
+            alpaca.trading.getPositions(),
+            getRiskState(db),
+          ]);
           const clock = await alpaca.trading.getClock();
+          const policy = new PolicyEngine(this.policyConfig!).evaluate({
+            order: orderParams,
+            account,
+            positions,
+            clock,
+            riskState: currentRisk,
+            halal,
+          });
+          if (!policy.allowed) {
+            await insertToolLog(db, {
+              request_id: this.requestId,
+              tool_name: "orders-submit",
+              input: { approval_token: "[REDACTED]" },
+              output: { submitted: false, policy, halal },
+              latency_ms: Date.now() - startTime,
+              provider_calls: 6,
+            });
+            return {
+              content: [{ type: "text" as const, text: JSON.stringify(success({ submitted: false, policy, halal })) }],
+              isError: true,
+            };
+          }
           const isCrypto = orderParams.asset_class === "crypto";
           if (!isCrypto && !clock.is_open && orderParams.time_in_force === "day") {
             return {
@@ -1709,6 +1745,17 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
 
   private registerResearchTools(db: D1Client, alpaca: ReturnType<typeof createAlpacaProviders>) {
     this.server.registerTool(
+      "halal-screen",
+      {
+        description:
+          "Get dated AAOIFI screening evidence for an individual stock. Unknown, questionable, stale and unsupported results block purchases.",
+        inputSchema: { symbol: z.string().min(1).max(15) },
+      },
+      async ({ symbol }) => ({
+        content: [{ type: "text" as const, text: JSON.stringify(success(await this.getScreening().screen(symbol))) }],
+      })
+    );
+    this.server.registerTool(
       "symbol-research",
       {
         description: "Generate comprehensive research report for a symbol (requires LLM feature)",
@@ -1732,11 +1779,13 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
           };
         }
         try {
-          const [snapshot, bars, positions, news] = await Promise.all([
+          const [snapshot, bars, positions, news, halal, fundamentals] = await Promise.all([
             alpaca.marketData.getSnapshot(symbol.toUpperCase()),
             alpaca.marketData.getBars(symbol.toUpperCase(), "1Day", { limit: 60 }),
             alpaca.trading.getPositions(),
             queryNewsItems(db, { symbol: symbol.toUpperCase(), limit: 5 }),
+            this.getScreening().screen(symbol),
+            getFundamentalContext(this.env, symbol.toUpperCase()),
           ]);
 
           const technicals = computeTechnicals(symbol.toUpperCase(), bars);
@@ -1751,6 +1800,8 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
             recentNews: news.map((n) => ({ headline: n.headline, date: n.published_at ?? n.created_at })),
             technicals: technicals as unknown as Record<string, unknown>,
             positions: position ? [{ qty: position.qty, avg_entry_price: position.avg_entry_price }] : [],
+            halal,
+            fundamentals,
           });
 
           await insertToolLog(db, {
@@ -1766,7 +1817,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
             content: [
               {
                 type: "text" as const,
-                text: JSON.stringify(success({ symbol: symbol.toUpperCase(), report }), null, 2),
+                text: JSON.stringify(success({ symbol: symbol.toUpperCase(), report, halal, fundamentals }), null, 2),
               },
             ],
           };
@@ -2165,6 +2216,22 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
           }
 
           const orderParams = validation.order_params!;
+          if (orderParams.side === "buy") {
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify(
+                    failure({
+                      code: ErrorCode.FORBIDDEN,
+                      message: "Options purchases are outside this individual-stock halal portfolio",
+                    })
+                  ),
+                },
+              ],
+              isError: true,
+            };
+          }
           const clock = await alpaca.trading.getClock();
           const isCrypto = orderParams.asset_class === "crypto";
           if (!isCrypto && !clock.is_open && orderParams.time_in_force === "day") {

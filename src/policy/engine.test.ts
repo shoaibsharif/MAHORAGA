@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { OrderPreview } from "../mcp/types";
+import { unknownHalalReport } from "../providers/halal";
 import type { Account, MarketClock, Position } from "../providers/types";
 import type { RiskState } from "../storage/d1/queries/risk-state";
 import { getDefaultOptionsPolicyConfig, type PolicyConfig } from "./config";
@@ -117,12 +118,19 @@ function createTestPosition(overrides: Partial<Position> = {}): Position {
 }
 
 function createTestContext(overrides: Partial<PolicyContext> = {}): PolicyContext {
+  const symbol = overrides.order?.symbol ?? "AAPL";
   return {
     order: createTestOrder(),
     account: createTestAccount(),
     positions: [],
     clock: createTestClock(),
     riskState: createTestRiskState(),
+    halal: {
+      ...unknownHalalReport(symbol, "Test screening evidence"),
+      status: "compliant",
+      assetType: "stock",
+      screenedAt: new Date().toISOString(),
+    },
     ...overrides,
   };
 }
@@ -132,6 +140,47 @@ describe("PolicyEngine", () => {
 
   beforeEach(() => {
     engine = new PolicyEngine(createTestConfig());
+  });
+
+  describe("halal purchase enforcement", () => {
+    it("blocks a buy without screening evidence even when every financial risk check passes", () => {
+      const result = engine.evaluate(createTestContext({ halal: undefined }));
+      expect(result.allowed).toBe(false);
+      expect(result.violations.map((violation) => violation.rule)).toEqual(["halal_eligibility"]);
+    });
+
+    it.each(["non_compliant", "questionable", "unknown", "stale", "unsupported"] as const)(
+      "blocks %s evidence",
+      (status) => {
+        const context = createTestContext();
+        context.halal = { ...context.halal!, status };
+        expect(engine.evaluate(context).allowed).toBe(false);
+      }
+    );
+
+    it("rechecks expiration instead of accepting an earlier approval", () => {
+      const context = createTestContext();
+      expect(engine.evaluate(context).allowed).toBe(true);
+      context.halal!.expiresAt = new Date(Date.now() - 1).toISOString();
+      expect(engine.evaluate(context).allowed).toBe(false);
+    });
+
+    it("rejects a compliant fund and crypto as outside the requested stock portfolio", () => {
+      const context = createTestContext();
+      context.halal!.assetType = "etf";
+      expect(engine.evaluate(context).allowed).toBe(false);
+      context.order.asset_class = "crypto";
+      expect(engine.evaluate(context).allowed).toBe(false);
+    });
+
+    it("permits closing an owned stock without a passing screen", () => {
+      const context = createTestContext({
+        order: createTestOrder({ side: "sell" }),
+        positions: [createTestPosition()],
+        halal: undefined,
+      });
+      expect(engine.evaluate(context).allowed).toBe(true);
+    });
   });
 
   describe("kill switch", () => {

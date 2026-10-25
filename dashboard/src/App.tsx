@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
+import { HalalScreeningPanel } from "./components/HalalScreeningPanel";
 import { LineChart, Sparkline } from "./components/LineChart";
 import { Metric, MetricInline } from "./components/Metric";
 import { NotificationBell } from "./components/NotificationBell";
@@ -874,6 +875,10 @@ export default function App() {
               </div>
             </Panel>
           </div>
+        </div>
+
+        <div className="mt-4">
+          <HalalScreeningPanel reports={status?.halalReports} />
         </div>
 
         <footer className="mt-4 pt-3 border-t border-hud-line flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">

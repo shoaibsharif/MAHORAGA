@@ -13,6 +13,7 @@ import type { OrderPreview } from "../mcp/types";
 import type { PolicyConfig } from "../policy/config";
 import { type PolicyContext, PolicyEngine } from "../policy/engine";
 import type { AlpacaProviders } from "../providers/alpaca";
+import type { HalalScreening } from "../providers/halal";
 import type { Account, MarketClock, Position } from "../providers/types";
 import type { D1Client } from "../storage/d1/client";
 import type { RiskState } from "../storage/d1/queries/risk-state";
@@ -28,6 +29,7 @@ export interface PolicyBrokerDeps {
   log: (agent: string, action: string, details: Record<string, unknown>) => void;
   cryptoSymbols: string[];
   allowedExchanges: string[];
+  screening?: HalalScreening;
   /** Called after a successful buy order */
   onBuy?: (symbol: string, notional: number) => void;
   /** Called after a successful sell/close order */
@@ -161,7 +163,8 @@ export function createPolicyBroker(deps: PolicyBrokerDeps): StrategyContext["bro
       const policyAccount = accountForPolicy(account, positions, order.notional ?? notional);
       if (!policyAccount) return false;
 
-      const ctx: PolicyContext = { order, account: policyAccount, positions, clock, riskState };
+      const halal = await deps.screening?.screen(orderSymbol);
+      const ctx: PolicyContext = { order, account: policyAccount, positions, clock, riskState, halal };
       const result = engine.evaluate(ctx);
 
       if (!result.allowed) {
@@ -169,6 +172,7 @@ export function createPolicyBroker(deps: PolicyBrokerDeps): StrategyContext["bro
           symbol,
           notional,
           violations: result.violations.map((v) => v.message),
+          halal,
         });
         return false;
       }
@@ -195,6 +199,7 @@ export function createPolicyBroker(deps: PolicyBrokerDeps): StrategyContext["bro
         status: alpacaOrder.status,
         notional,
         reason,
+        halal,
       });
 
       // Invalidate cache after order
