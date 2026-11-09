@@ -9,9 +9,6 @@
 .env
 .env.*
 !.env.example
-wrangler.jsonc
-!wrangler.example.jsonc
-wrangler.deploy.generated.json
 
 # Agent runtime files (contain personal trading data)
 agent-config.json

@@ -45,115 +45,116 @@ The **Halal Screening** dashboard panel shows evidence, dates, rejection reasons
 
 ## Quick Start
 
-For this fork's hosted deployment, GitHub Actions tests every push to `main` and `codex/**`; only pushes to `main` (or a manual run on `main`) deploy production. The workflow builds the dashboard, creates or reuses the `mahoraga-halal` D1/KV/R2 resources, applies database migrations, and deploys the dashboard and Worker together. `/api/*` is an authenticated same-origin alias for `/agent/*`.
-
-Set the Actions repository variable `CLOUDFLARE_ACCOUNT_ID` and secret `CLOUDFLARE_API_TOKEN`. Set the repository variable `CLOUDFLARE_DEPLOY_ENABLED=true` when the credential is ready; leaving it unset pauses deployment while checks still run. Scope the token to your account with Workers Scripts Edit, Workers KV Storage Edit, D1 Edit, Workers R2 Storage Edit and Account Settings Read. R2 must be enabled in that account. The deployment configuration is generated from `wrangler.deploy.template.json`; local placeholder IDs and credentials are never committed. Deployment fails if provisioning or tests fail, and it does not run the agent's enable endpoint.
-
-After the first deployment, upload the existing local application credentials directly to the Worker with `node scripts/upload-cloudflare-secrets.mjs .dev.vars` while logged into the intended Cloudflare account. This streams an explicit allowlist of values to Wrangler over stdin, including the configured LLM provider/model. It excludes Discord notification settings and cannot override paper mode. GitHub stores only the Cloudflare deployment credential; brokerage and LLM credentials stay in Cloudflare Worker secrets. A fresh agent honors the deployed LLM selection and starts disabled with a $100 sleeve. Future deployments preserve its stored configuration and enable state.
+Cloudflare builds and deploys this repository from GitHub. Every push to `main` runs the tests, builds the dashboard, applies database migrations, and deploys the dashboard and Worker together. GitHub Actions runs the same checks on pushes and pull requests but deploys nothing. `/api/*` is an authenticated same-origin alias for `/agent/*`.
 
 Orders are sized from a sleeve that starts at `starting_equity` (default $100) and compounds with the agent's realized and unrealized P&L. Alpaca's paper cash is left untouched, including the usual $100,000 paper balance. With `position_size_pct_of_cash=10` and `DEFAULT_MAX_POSITION_PCT=0.10`, a $100 sleeve buys about $6–$10 per stock entry. Leave the position dollar cap blank, keep `min_trade_notional=1`, and set `DEFAULT_MAX_NOTIONAL_PER_TRADE=none` when you do not want a fixed dollar ceiling. Stock entries are fractional dollar market orders on assets Alpaca marks tradable and fractionable ([Alpaca fractional trading](https://docs.alpaca.markets/us/docs/fractional-trading)). A losing close is recorded against the sleeve and starts the loss cooldown. Leave options and crypto disabled. Other open positions in the same Alpaca account count against the sleeve, so start from a flat paper book. This does not fund the account or enable live trading. MiniMax API usage is billed separately from the brokerage balance.
 
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/ygwyg/MAHORAGA.git
-cd mahoraga
+git clone https://github.com/shoaibsharif/MAHORAGA.git
+cd MAHORAGA
 npm install
+npm ci --prefix dashboard && npm run build --prefix dashboard
 ```
 
-### 2. Create Cloudflare resources
+### 2. Create the database
+
+Before the first build, create a D1 database named `mahoraga-db` (Storage & Databases → D1 in the Cloudflare dashboard, or `npx wrangler d1 create mahoraga-db`). Each deploy applies migrations before the new Worker goes live, so the database has to exist first. The KV namespace and R2 bucket are created on the first deploy; R2 must be enabled on the account.
+
+### 3. Connect the repository
+
+In the Cloudflare dashboard, open Workers & Pages → Create → Import a repository, pick this repository, and set:
+
+| Setting | Value |
+|---|---|
+| Worker name | `mahoraga` (must match `name` in `wrangler.jsonc`) |
+| Production branch | `main` |
+| Build command | `npm run build:cloudflare` |
+| Deploy command | `npm run deploy` |
+| Builds for non-production branches | Off |
+
+The build command builds the dashboard and runs the tests, so a failing test stops the deploy. The deploy command applies D1 migrations, then runs `wrangler deploy`. The API token Cloudflare creates for builds doesn't include D1, so edit it to add **D1 Edit**; otherwise migrations fail. Keep preview builds off: a preview of a trading agent would share the production database and Durable Objects.
+
+`npm run deploy` also works from your machine after `npx wrangler login` and a dashboard build.
+
+### 4. Set secrets
+
+After the first deploy, add the Worker's secrets under Settings → Variables and Secrets, or upload them from your local `.dev.vars`:
 
 ```bash
-# Create D1 database
-npx wrangler d1 create mahoraga-db
-# Copy the database_id to wrangler.jsonc
-
-# Create KV namespace
-npx wrangler kv namespace create CACHE
-# Copy the id to wrangler.jsonc
-
-# Run migrations
-npx wrangler d1 migrations apply mahoraga-db
+npx wrangler login
+node scripts/upload-cloudflare-secrets.mjs .dev.vars
 ```
 
-### 3. Set secrets
+The script uploads an allowlist: the Alpaca keys, `MAHORAGA_API_TOKEN`, `KILL_SWITCH_SECRET`, the LLM provider, model and API keys, and `SEC_USER_AGENT`. It skips Discord settings and can't override paper mode, which is set by `ALPACA_PAPER` in `wrangler.jsonc`. A fresh agent uses the deployed LLM selection and starts disabled with a $100 sleeve. Later deploys keep its stored configuration and enabled state.
+
+To set secrets one at a time instead:
 
 ```bash
 # Required
 npx wrangler secret put ALPACA_API_KEY
 npx wrangler secret put ALPACA_API_SECRET
+npx wrangler secret put MAHORAGA_API_TOKEN   # e.g. openssl rand -base64 48
+npx wrangler secret put KILL_SWITCH_SECRET   # Emergency kill switch (separate from API token)
 
-# API Authentication - generate a secure random token (64+ chars recommended)
-# Example: openssl rand -base64 48
-npx wrangler secret put MAHORAGA_API_TOKEN
+# LLM provider: "openai-raw" (default), "ai-sdk", or "cloudflare-gateway"
+npx wrangler secret put LLM_PROVIDER
+npx wrangler secret put LLM_MODEL            # e.g. "gpt-4o-mini" or "minimax/MiniMax-M3.1-Flash"
 
-# LLM Provider (choose one mode)
-npx wrangler secret put LLM_PROVIDER  # "openai-raw" (default), "ai-sdk", or "cloudflare-gateway"
-npx wrangler secret put LLM_MODEL     # e.g. "gpt-4o-mini" or "anthropic/claude-sonnet-4"
-
-# LLM API Keys (based on provider mode)
-npx wrangler secret put OPENAI_API_KEY         # For openai-raw or ai-sdk with OpenAI
-npx wrangler secret put OPENAI_BASE_URL        # Optional: override OpenAI base URL for openai-raw and ai-sdk (OpenAI models)
-# npx wrangler secret put ANTHROPIC_API_KEY    # For ai-sdk with Anthropic
-# npx wrangler secret put GOOGLE_GENERATIVE_AI_API_KEY  # For ai-sdk with Google
-# npx wrangler secret put XAI_API_KEY          # For ai-sdk with xAI/Grok
-# npx wrangler secret put DEEPSEEK_API_KEY     # For ai-sdk with DeepSeek
-# npx wrangler secret put CLOUDFLARE_AI_GATEWAY_ACCOUNT_ID  # For cloudflare-gateway
-# npx wrangler secret put CLOUDFLARE_AI_GATEWAY_ID          # For cloudflare-gateway
-# npx wrangler secret put CLOUDFLARE_AI_GATEWAY_TOKEN       # For cloudflare-gateway
+# LLM API key for the chosen provider
+npx wrangler secret put OPENAI_API_KEY       # openai-raw, or ai-sdk with OpenAI
+# npx wrangler secret put OPENAI_BASE_URL    # Optional OpenAI-compatible base URL
+# npx wrangler secret put MINIMAX_API_KEY
+# npx wrangler secret put ANTHROPIC_API_KEY
+# npx wrangler secret put GOOGLE_GENERATIVE_AI_API_KEY
+# npx wrangler secret put XAI_API_KEY
+# npx wrangler secret put DEEPSEEK_API_KEY
+# npx wrangler secret put CLOUDFLARE_AI_GATEWAY_ACCOUNT_ID
+# npx wrangler secret put CLOUDFLARE_AI_GATEWAY_ID
+# npx wrangler secret put CLOUDFLARE_AI_GATEWAY_TOKEN
 
 # Optional
-npx wrangler secret put ALPACA_PAPER         # "true" for paper trading (recommended)
+npx wrangler secret put SEC_USER_AGENT       # "AppName you@example.com" for SEC requests
 npx wrangler secret put TWITTER_BEARER_TOKEN
 npx wrangler secret put DISCORD_WEBHOOK_URL
-npx wrangler secret put KILL_SWITCH_SECRET   # Emergency kill switch (separate from API token)
-```
-
-### 4. Deploy
-
-```bash
-npx wrangler deploy
 ```
 
 ### 5. Enable the agent
 
-All API endpoints require authentication via Bearer token:
+The dashboard is served from the Worker's URL. All API endpoints require the Bearer token:
 
 ```bash
-# Set your API token as an env var for convenience
+export MAHORAGA_URL="https://mahoraga.<your-subdomain>.workers.dev"
 export MAHORAGA_TOKEN="your-api-token"
 
-# Enable the agent
-curl -H "Authorization: Bearer $MAHORAGA_TOKEN" \
-  https://mahoraga.bernardoalmeida2004.workers.dev/agent/enable
+curl -H "Authorization: Bearer $MAHORAGA_TOKEN" "$MAHORAGA_URL/agent/enable"
 ```
 
 ### 6. Monitor
 
 ```bash
 # Check status
-curl -H "Authorization: Bearer $MAHORAGA_TOKEN" \
-  https://mahoraga.bernardoalmeida2004.workers.dev/agent/status
+curl -H "Authorization: Bearer $MAHORAGA_TOKEN" "$MAHORAGA_URL/agent/status"
 
 # View logs
-curl -H "Authorization: Bearer $MAHORAGA_TOKEN" \
-  https://mahoraga.bernardoalmeida2004.workers.dev/agent/logs
+curl -H "Authorization: Bearer $MAHORAGA_TOKEN" "$MAHORAGA_URL/agent/logs"
 
 # Emergency kill switch (uses separate KILL_SWITCH_SECRET)
-curl -H "Authorization: Bearer $KILL_SWITCH_SECRET" \
-  https://mahoraga.bernardoalmeida2004.workers.dev/agent/kill
-
-# Run dashboard locally
-cd dashboard && npm install && npm run dev
+curl -H "Authorization: Bearer $KILL_SWITCH_SECRET" "$MAHORAGA_URL/agent/kill"
 ```
 
 ## Local Development
 
+`wrangler dev` uses the same `wrangler.jsonc` with local D1, KV and R2, and reads secrets from `.dev.vars`. It serves `dashboard/dist`, so build the dashboard once first (step 1), then apply migrations to the local database:
+
 ```bash
+npm run db:migrate
+
 # Terminal 1 - Start wrangler
 npx wrangler dev
 
-# Terminal 2 - Start dashboard  
+# Terminal 2 - Start dashboard
 cd dashboard && npm run dev
 
 # Terminal 3 - Enable the agent
@@ -307,7 +308,7 @@ npx wrangler secret put ANTHROPIC_API_KEY # Your Anthropic API key
 All `/agent/*` endpoints require Bearer token authentication using `MAHORAGA_API_TOKEN`:
 
 ```bash
-curl -H "Authorization: Bearer $MAHORAGA_TOKEN" https://mahoraga.bernardoalmeida2004.workers.dev/agent/status
+curl -H "Authorization: Bearer $MAHORAGA_TOKEN" "$MAHORAGA_URL/agent/status"
 ```
 
 Generate a secure token: `openssl rand -base64 48`
@@ -317,7 +318,7 @@ Generate a secure token: `openssl rand -base64 48`
 The `/agent/kill` endpoint uses a separate `KILL_SWITCH_SECRET` for emergency shutdown:
 
 ```bash
-curl -H "Authorization: Bearer $KILL_SWITCH_SECRET" https://mahoraga.bernardoalmeida2004.workers.dev/agent/kill
+curl -H "Authorization: Bearer $KILL_SWITCH_SECRET" "$MAHORAGA_URL/agent/kill"
 ```
 
 This immediately disables the agent, cancels all alarms, and clears the signal cache.

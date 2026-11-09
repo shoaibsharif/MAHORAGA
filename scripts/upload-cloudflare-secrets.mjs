@@ -16,7 +16,7 @@ try {
   for (const name of ["ALPACA_API_KEY", "ALPACA_API_SECRET", "MAHORAGA_API_TOKEN", "KILL_SWITCH_SECRET"]) {
     if (!selected[name] || /^(your_|generate_)/.test(selected[name])) throw new Error(`Configure ${name} in the local secrets file first`);
   }
-  const child = spawn("node_modules/.bin/wrangler", ["secret", "bulk", "--config", "wrangler.deploy.template.json", "--name", "mahoraga-halal"], {
+  const child = spawn("node_modules/.bin/wrangler", ["secret", "bulk"], {
     stdio: ["pipe", "inherit", "inherit"],
     env: { ...process.env, WRANGLER_SEND_METRICS: "false" },
   });
