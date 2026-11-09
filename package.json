@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "build": "tsc",
-    "build:cloudflare": "npm ci --prefix dashboard && npm run build --prefix dashboard && npm run test:run",
+    "build:cloudflare": "npm run typecheck && npm run test:run && npm ci --prefix dashboard && npm run build --prefix dashboard",
     "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
     "db:migrate": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",

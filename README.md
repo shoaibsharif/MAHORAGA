@@ -45,7 +45,7 @@ The **Halal Screening** dashboard panel shows evidence, dates, rejection reasons
 
 ## Quick Start
 
-Cloudflare builds and deploys this repository from GitHub. Every push to `main` runs the tests, builds the dashboard, applies database migrations, and deploys the dashboard and Worker together. GitHub Actions runs the same checks on pushes and pull requests but deploys nothing. `/api/*` is an authenticated same-origin alias for `/agent/*`.
+Cloudflare builds and deploys this repository from GitHub. Every push to `main` runs the typecheck and tests, builds the dashboard, applies database migrations, and deploys the dashboard and Worker together. `/api/*` is an authenticated same-origin alias for `/agent/*`.
 
 Orders are sized from a sleeve that starts at `starting_equity` (default $100) and compounds with the agent's realized and unrealized P&L. Alpaca's paper cash is left untouched, including the usual $100,000 paper balance. With `position_size_pct_of_cash=10` and `DEFAULT_MAX_POSITION_PCT=0.10`, a $100 sleeve buys about $6–$10 per stock entry. Leave the position dollar cap blank, keep `min_trade_notional=1`, and set `DEFAULT_MAX_NOTIONAL_PER_TRADE=none` when you do not want a fixed dollar ceiling. Stock entries are fractional dollar market orders on assets Alpaca marks tradable and fractionable ([Alpaca fractional trading](https://docs.alpaca.markets/us/docs/fractional-trading)). A losing close is recorded against the sleeve and starts the loss cooldown. Leave options and crypto disabled. Other open positions in the same Alpaca account count against the sleeve, so start from a flat paper book. This does not fund the account or enable live trading. MiniMax API usage is billed separately from the brokerage balance.
 
@@ -74,7 +74,7 @@ In the Cloudflare dashboard, open Workers & Pages → Create → Import a reposi
 | Deploy command | `npm run deploy` |
 | Builds for non-production branches | Off |
 
-The build command builds the dashboard and runs the tests, so a failing test stops the deploy. The deploy command applies D1 migrations, then runs `wrangler deploy`. The API token Cloudflare creates for builds doesn't include D1, so edit it to add **D1 Edit**; otherwise migrations fail. Keep preview builds off: a preview of a trading agent would share the production database and Durable Objects.
+The build command runs the typecheck and tests, then builds the dashboard, so a type error or failing test stops the deploy before the database is touched. The deploy command applies D1 migrations, then runs `wrangler deploy`. The API token Cloudflare creates for builds doesn't include D1, so edit it to add **D1 Edit**; otherwise migrations fail. Keep preview builds off: a preview of a trading agent would share the production database and Durable Objects.
 
 `npm run deploy` also works from your machine after `npx wrangler login` and a dashboard build.
 
