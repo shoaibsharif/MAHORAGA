@@ -51,6 +51,8 @@ import type { StrategyContext } from "../strategy/types";
 
 export class MahoragaHarness extends DurableObject<Env> {
   private state: AgentState = { ...DEFAULT_STATE, halalReports: {}, fundamentalResearch: {} };
+  /** When the analyst model last ran; kept in memory, so a restart allows one early call. */
+  private lastAnalystModelCall = 0;
   private _llm: LLMProvider | null = null;
   private sleeveReserved = 0;
   private screening = new HalalScreeningService(this.env.CACHE);
@@ -786,10 +788,16 @@ export class MahoragaHarness extends DurableObject<Env> {
         Date.now() - research.timestamp < 180_000
     );
     prompt.user += `\n\nELIGIBLE RESEARCH (only these symbols may receive BUY):\n${JSON.stringify(screenedResearch)}`;
-    // The analyst model is the expensive tier: call it only when research found a buy or a position needs review.
-    if (positions.length === 0 && !screenedResearch.some((research) => research.verdict === "BUY")) {
-      return { recommendations: [], market_summary: "No BUY research to review", high_conviction: [] };
+    // The analyst model is the expensive tier: call it for BUY research it hasn't seen,
+    // or to review held positions at most every 30 minutes.
+    const newBuy = screenedResearch.some(
+      (research) => research.verdict === "BUY" && research.timestamp > this.lastAnalystModelCall
+    );
+    const reviewDue = positions.length > 0 && Date.now() - this.lastAnalystModelCall >= 30 * 60_000;
+    if (!newBuy && !reviewDue) {
+      return { recommendations: [], market_summary: "No new BUY research or position review due", high_conviction: [] };
     }
+    this.lastAnalystModelCall = Date.now();
 
     try {
       const response = await this._llm.complete({

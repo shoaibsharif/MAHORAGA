@@ -56,6 +56,7 @@ function setup() {
   };
   const harness = Object.assign(Object.create(MahoragaHarness.prototype), {
     state,
+    lastAnalystModelCall: 0,
     _llm: { complete },
     screening: { screen },
     env: {} as Env,
@@ -176,6 +177,29 @@ describe("dynamic screened research", () => {
     ).callAnalystLLM(ctx, state.signalCache, [], { cash: 100, equity: 100 });
     expect(result.recommendations).toEqual([]);
     expect(complete).not.toHaveBeenCalled();
+  });
+
+  it("calls the analyst model once per new BUY research, not every cycle", async () => {
+    const { harness, state, complete, ctx } = setup();
+    state.signalCache = [signal("DYNAMIC", 0.9)];
+    state.signalResearch.DYNAMIC = {
+      symbol: "DYNAMIC",
+      verdict: "BUY",
+      confidence: 0.9,
+      entry_quality: "good",
+      reasoning: "Current research",
+      catalysts: [],
+      red_flags: [],
+      timestamp: Date.now() - 1_000,
+    };
+    state.halalReports.DYNAMIC = passing("DYNAMIC");
+    complete.mockResolvedValue({ content: JSON.stringify({ recommendations: [] }) });
+    const analyst = harness as unknown as {
+      callAnalystLLM(ctx: StrategyContext, signals: Signal[], positions: unknown[], account: unknown): Promise<unknown>;
+    };
+    await analyst.callAnalystLLM(ctx, state.signalCache, [], { cash: 100, equity: 100 });
+    await analyst.callAnalystLLM(ctx, state.signalCache, [], { cash: 100, equity: 100 });
+    expect(complete).toHaveBeenCalledTimes(1);
   });
 
   it("filters extra analyst BUY recommendations without preventing SELL recommendations", async () => {
