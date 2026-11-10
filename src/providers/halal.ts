@@ -119,7 +119,9 @@ export class HalalScreeningService implements HalalScreening {
 
     let report: HalalReport;
     try {
-      const response = await this.fetcher(
+      // Workers' fetch throws "Illegal invocation" when called with a `this`, so call it unbound.
+      const fetcher = this.fetcher;
+      const response = await fetcher(
         `https://halalscreener.app/api/embed/badge?symbol=${encodeURIComponent(symbol)}`,
         {
           headers: { Accept: "application/json" },

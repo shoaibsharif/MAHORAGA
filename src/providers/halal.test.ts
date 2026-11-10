@@ -38,6 +38,12 @@ describe("live halal evidence", () => {
     expect(fetcher.mock.calls[0]?.[0]).toBe("https://halalscreener.app/api/embed/badge?symbol=TEST");
   });
 
+  it("calls fetch without a this binding, which Workers rejects as an illegal invocation", async () => {
+    const { service, fetcher } = provider(badge());
+    await service.screen("TEST");
+    expect(fetcher.mock.contexts[0]).toBeUndefined();
+  });
+
   it.each([
     ["noncompliant", { status: "haram" }],
     ["questionable", { status: "doubtful" }],
