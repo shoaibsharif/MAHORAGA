@@ -23,11 +23,27 @@ export interface FundamentalContext {
   checkedAt: string;
   sourceUrl: string | null;
   metrics: Record<string, FinancialMetric>;
+  /** Full fiscal-year figures from the latest annual report, for valuation multiples. */
+  annual?: Record<string, FinancialMetric>;
+  sharesOutstanding?: { value: number; end: string; filed: string } | null;
   filings: Array<{ form: string; filed: string; url: string }>;
   limitations: string[];
 }
 
-export function extractMetrics(facts: Record<string, { units?: { USD?: Fact[] } }>): FundamentalContext["metrics"] {
+const ANNUAL_FORMS = ["10-K", "10-K/A"];
+const DAY_MS = 86_400_000;
+
+/** A full fiscal year: an annual report covering roughly twelve months. */
+function isFiscalYear(fact: Fact): boolean {
+  if (!ANNUAL_FORMS.includes(fact.form) || !fact.start) return false;
+  const days = (Date.parse(fact.end) - Date.parse(fact.start)) / DAY_MS;
+  return days >= 340 && days <= 380;
+}
+
+export function extractMetrics(
+  facts: Record<string, { units?: { USD?: Fact[] } }>,
+  annualOnly = false
+): FundamentalContext["metrics"] {
   const concepts: Record<string, string[]> = {
     revenue: ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet"],
     netIncome: ["NetIncomeLoss", "ProfitLoss"],
@@ -48,7 +64,8 @@ export function extractMetrics(facts: Record<string, { units?: { USD?: Fact[] } 
           Date.parse(fact.end) <= Date.now() &&
           Number.isFinite(Date.parse(fact.filed)) &&
           Date.parse(fact.filed) <= Date.now() &&
-          (!fact.start || Date.parse(fact.start) <= Date.parse(fact.end))
+          (!fact.start || Date.parse(fact.start) <= Date.parse(fact.end)) &&
+          (!annualOnly || isFiscalYear(fact))
       )
       .sort(
         (a, b) =>
@@ -66,6 +83,30 @@ export function extractMetrics(facts: Record<string, { units?: { USD?: Fact[] } 
       };
   }
   return metrics;
+}
+
+/** The most recent cover-page share count; several classes reported on one date are summed. */
+export function latestShareCount(facts: Fact[] = []): FundamentalContext["sharesOutstanding"] {
+  const valid = facts.filter(
+    (fact) =>
+      Number.isFinite(fact.val) &&
+      fact.val > 0 &&
+      Number.isFinite(Date.parse(fact.end)) &&
+      Date.parse(fact.end) <= Date.now()
+  );
+  const end = valid
+    .map((fact) => fact.end)
+    .sort()
+    .at(-1);
+  if (!end) return null;
+  const sameDate = valid.filter((fact) => fact.end === end);
+  const latestFiling =
+    sameDate
+      .map((fact) => fact.filed)
+      .sort()
+      .at(-1) ?? end;
+  const fromLatestFiling = sameDate.filter((fact) => fact.filed === latestFiling);
+  return { value: fromLatestFiling.reduce((sum, fact) => sum + fact.val, 0), end, filed: latestFiling };
 }
 
 export async function getFundamentalContext(
@@ -95,7 +136,7 @@ export async function getFundamentalContext(
     return response.json();
   }
   try {
-    const key = `fundamentals:sec:v1:${symbol}`;
+    const key = `fundamentals:sec:v2:${symbol}`;
     const cached = await env.CACHE.get<FundamentalContext>(key, "json").catch(() => null);
     if (cached?.symbol === symbol && Date.now() - Date.parse(cached.checkedAt) < 3_600_000) return cached;
     let tickers = await env.CACHE.get<Record<string, { cik_str: number; ticker: string; title: string }>>(
@@ -119,9 +160,17 @@ export async function getFundamentalContext(
       json(`https://data.sec.gov/submissions/CIK${cik}.json`),
     ]);
     if (facts.status === "fulfilled") {
-      const data = facts.value as { cik?: number; facts?: { "us-gaap"?: Parameters<typeof extractMetrics>[0] } };
+      const data = facts.value as {
+        cik?: number;
+        facts?: {
+          "us-gaap"?: Parameters<typeof extractMetrics>[0];
+          dei?: Record<string, { units?: { shares?: Fact[] } }>;
+        };
+      };
       if (data.cik !== company.cik_str) throw new Error("SEC financial facts do not match the issuer");
       result.metrics = extractMetrics(data.facts?.["us-gaap"] ?? {});
+      result.annual = extractMetrics(data.facts?.["us-gaap"] ?? {}, true);
+      result.sharesOutstanding = latestShareCount(data.facts?.dei?.EntityCommonStockSharesOutstanding?.units?.shares);
     } else result.limitations.push("SEC financial facts unavailable");
     if (submissions.status === "fulfilled") {
       const data = submissions.value as {

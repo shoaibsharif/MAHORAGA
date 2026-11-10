@@ -38,7 +38,7 @@ import { createXai } from "@ai-sdk/xai";
 import { createMinimax } from "@minimax-ai/ai-sdk-provider";
 // Import after mocks
 import { generateText } from "ai";
-import { AISDKProvider, createAISDKProvider, PROVIDER_MODELS, SUPPORTED_PROVIDERS } from "./ai-sdk";
+import { AISDKProvider, anthropicOptions, createAISDKProvider, PROVIDER_MODELS, SUPPORTED_PROVIDERS } from "./ai-sdk";
 
 const mockGenerateText = generateText as ReturnType<typeof vi.fn>;
 
@@ -409,21 +409,45 @@ describe("AI SDK Provider", () => {
       });
     });
 
-    it("works with Anthropic provider", async () => {
+    it("sends Claude calls with effort and fallbacks and without temperature", async () => {
+      mockGenerateText.mockResolvedValueOnce({
+        text: '{"recommendations":[]}',
+        finishReason: "stop",
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+      });
       const provider = createAISDKProvider({
-        model: "anthropic/claude-sonnet-4",
+        model: "anthropic/claude-opus-5-5",
         apiKeys: { anthropic: "sk-ant-test" },
       });
 
       await provider.complete({
         messages: [{ role: "user", content: "Test" }],
+        max_tokens: 800,
+        temperature: 0.4,
+        response_format: { type: "json_object" },
       });
 
-      expect(mockGenerateText).toHaveBeenCalledWith(
-        expect.objectContaining({
-          model: expect.objectContaining({ provider: "anthropic", model: "claude-sonnet-4" }),
-        })
+      const call = mockGenerateText.mock.calls[0]?.[0];
+      expect(call.model).toEqual(expect.objectContaining({ provider: "anthropic", model: "claude-opus-5-5" }));
+      expect(call).not.toHaveProperty("temperature");
+      expect(call.maxOutputTokens).toBe(16_000);
+      expect(call.providerOptions).toEqual({ anthropic: { effort: "medium", fallbacks: "default" } });
+    });
+
+    it("rejects a Claude answer that was cut off or declined", async () => {
+      mockGenerateText.mockResolvedValueOnce({ text: "", finishReason: "content-filter", usage: {} });
+      const provider = createAISDKProvider({
+        model: "anthropic/claude-opus-5-5",
+        apiKeys: { anthropic: "sk-ant-test" },
+      });
+      await expect(provider.complete({ messages: [{ role: "user", content: "Test" }] })).rejects.toThrow(
+        "incomplete answer"
       );
+    });
+
+    it("only requests fallbacks from Claude models that support them", () => {
+      expect(anthropicOptions("claude-sonnet-5-5")).toEqual({ effort: "medium", fallbacks: "default" });
+      expect(anthropicOptions("claude-haiku-5-5")).toEqual({ effort: "medium" });
     });
 
     it("works with Google provider", async () => {

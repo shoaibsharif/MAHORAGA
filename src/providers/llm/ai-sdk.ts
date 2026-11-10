@@ -124,7 +124,10 @@ export class AISDKProvider implements LLMProvider {
       }
 
       const isMiniMax = providerName === "minimax";
-      const jsonOutput = isMiniMax && params.response_format?.type === "json_object";
+      const isAnthropic = providerName === "anthropic";
+      // These models think before answering, so they need room in the output budget and a strict JSON reminder.
+      const reasons = isMiniMax || isAnthropic;
+      const jsonOutput = reasons && params.response_format?.type === "json_object";
       const instructions = params.messages.filter((msg) => msg.role === "system").map((msg) => msg.content);
       if (jsonOutput) {
         instructions.push(
@@ -145,20 +148,28 @@ export class AISDKProvider implements LLMProvider {
               abortSignal: AbortSignal.timeout(60_000),
               maxRetries: 0,
             }
-          : {
-              temperature: params.temperature ?? 0.7,
-              maxOutputTokens: params.max_tokens ?? 1024,
-            }),
+          : isAnthropic
+            ? {
+                // Current Claude models reject sampling parameters such as temperature; effort sets thinking depth.
+                maxOutputTokens: Math.max(params.max_tokens ?? 16_000, 16_000),
+                providerOptions: { anthropic: anthropicOptions(modelId) },
+                abortSignal: AbortSignal.timeout(120_000),
+              }
+            : {
+                temperature: params.temperature ?? 0.7,
+                maxOutputTokens: params.max_tokens ?? 1024,
+              }),
       });
 
-      if (isMiniMax) {
+      if (reasons) {
+        const name = isMiniMax ? "MiniMax" : "Claude";
         if (result.finishReason !== "stop" || !result.text.trim()) {
-          throw createError(ErrorCode.PROVIDER_ERROR, `MiniMax returned an incomplete answer (${result.finishReason})`);
+          throw createError(ErrorCode.PROVIDER_ERROR, `${name} returned an incomplete answer (${result.finishReason})`);
         }
         if (jsonOutput) {
-          const parsed: unknown = JSON.parse(result.text);
+          const parsed: unknown = JSON.parse(result.text.replace(/```json\n?|```/g, "").trim());
           if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
-            throw createError(ErrorCode.PROVIDER_ERROR, "MiniMax must return a JSON object");
+            throw createError(ErrorCode.PROVIDER_ERROR, `${name} must return a JSON object`);
           }
         }
       }
@@ -175,6 +186,15 @@ export class AISDKProvider implements LLMProvider {
       throw createError(ErrorCode.PROVIDER_ERROR, `AI SDK error: ${String(error)}`);
     }
   }
+}
+
+/**
+ * Medium effort suits a short JSON decision. Models that support it fall back to another
+ * Claude model when a safety classifier declines, instead of returning nothing.
+ */
+export function anthropicOptions(modelId: string): { effort: "medium"; fallbacks?: "default" } {
+  const fallbackCapable = /^claude-(opus-5-5|sonnet-5-5|fable-5-[12])$/.test(modelId);
+  return fallbackCapable ? { effort: "medium", fallbacks: "default" } : { effort: "medium" };
 }
 
 /** Legacy config format for backward compatibility */

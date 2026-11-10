@@ -103,6 +103,8 @@ export interface ResearchResult {
   timestamp: number;
   halal?: import("../providers/halal").HalalReport;
   fundamentals?: import("../providers/fundamentals").FundamentalContext;
+  priceHistory?: import("../providers/market-context").PriceHistory | null;
+  valuation?: import("../providers/market-context").Valuation | null;
 }
 
 export interface TwitterConfirmation {

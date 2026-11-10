@@ -150,6 +150,34 @@ describe("dynamic screened research", () => {
     expect(Object.keys(state.halalReports).sort()).toEqual(["DYNAMIC", "HELD", "RECENT"]);
   });
 
+  it("does not call the analyst model when no research says BUY and nothing is held", async () => {
+    const { harness, state, complete, ctx } = setup();
+    state.signalCache = [signal("DYNAMIC", 0.9)];
+    state.signalResearch.DYNAMIC = {
+      symbol: "DYNAMIC",
+      verdict: "WAIT",
+      confidence: 0.8,
+      entry_quality: "fair",
+      reasoning: "Current research",
+      catalysts: [],
+      red_flags: [],
+      timestamp: Date.now(),
+    };
+    state.halalReports.DYNAMIC = passing("DYNAMIC");
+    const result = await (
+      harness as unknown as {
+        callAnalystLLM(
+          ctx: StrategyContext,
+          signals: Signal[],
+          positions: unknown[],
+          account: unknown
+        ): Promise<{ recommendations: unknown[] }>;
+      }
+    ).callAnalystLLM(ctx, state.signalCache, [], { cash: 100, equity: 100 });
+    expect(result.recommendations).toEqual([]);
+    expect(complete).not.toHaveBeenCalled();
+  });
+
   it("filters extra analyst BUY recommendations without preventing SELL recommendations", async () => {
     const { harness, state, complete, ctx } = setup();
     state.signalResearch.DYNAMIC = {
