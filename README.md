@@ -24,12 +24,14 @@ MAHORAGA dynamically discovers stock candidates from StockTwits, Reddit and SEC 
 
 ## Requirements
 
-- Node.js 22.12+ (Node.js 24 or 26 recommended)
+- Node.js 24.22.2 (pinned in `.nvmrc`; run `nvm use`) and npm 12.2.2 (pinned by `packageManager` in `package.json`; install it with `npm install -g npm@12.2.2`)
 - Cloudflare account (free tier works)
 - Alpaca account (free, paper trading supported)
 - LLM API key (OpenAI, Anthropic, Google, xAI, DeepSeek, MiniMax) or Cloudflare AI Gateway credentials
 
 Both npm lockfiles contain the verified dependency versions. Cloudflare Agents currently requires MCP SDK `1.32.1`; keep that version aligned with its peer dependency. The Miniflare-scoped `undici` override selects patched `7.30.1` because the current Wrangler release still pins an affected version. Recheck the override when updating Wrangler ([advisory](https://github.com/advisories/GHSA-xjj6-f33q-929c)).
+
+npm 12 blocks dependency install scripts unless `allowScripts` in `package.json` approves them. The four packages that have one (esbuild, workerd, fsevents, core-js-pure) are denied: esbuild and workerd load their platform binaries from optional dependencies, and the other two scripts aren't needed. If a new dependency needs its script, review it with `npm install-scripts ls` before approving it.
 
 ## Dynamic halal stock portfolio
 
@@ -72,9 +74,11 @@ In the Cloudflare dashboard, open Workers & Pages → Create → Import a reposi
 | Production branch | `main` |
 | Build command | `npm run build:cloudflare` |
 | Deploy command | `npm run deploy` |
-| Builds for non-production branches | Off |
+| Enable Preview Builds (Settings → Build → Branch control) | Off |
 
-The build command runs the typecheck and tests, then builds the dashboard, so a type error or failing test stops the deploy before the database is touched. The deploy command applies D1 migrations, then runs `wrangler deploy`. The API token Cloudflare creates for builds doesn't include D1, so edit it to add **D1 Edit**; otherwise migrations fail. Keep preview builds off: a preview of a trading agent would share the production database and Durable Objects.
+The build command runs the typecheck and tests, then builds the dashboard, so a type error or failing test stops the deploy before the database is touched. The deploy command applies D1 migrations, then runs `wrangler deploy`. The API token Cloudflare creates for builds doesn't include D1, so edit it to add **D1 Edit**; otherwise migrations fail. Cloudflare's build reads the Node version from `.nvmrc` and the npm version from `packageManager`, so it installs with the same versions as your machine.
+
+Keep preview builds off. A preview doesn't inherit the production bindings, and `wrangler.jsonc` has no `previews` block, so a preview would start without its database, cache or bucket and fail.
 
 `npm run deploy` also works from your machine after `npx wrangler login` and a dashboard build.
 

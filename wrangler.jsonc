@@ -8,6 +8,14 @@
   "compatibility_date": "2026-10-19",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  // Fail the deploy rather than ship without source maps.
+  "upload_source_maps": true,
+  "observability": {
+    "enabled": true,
+    "logs": { "head_sampling_rate": 1 },
+    // Traffic is a few cron runs and dashboard calls, so every trace is kept.
+    "traces": { "enabled": true, "head_sampling_rate": 1 }
+  },
   "vars": {
     "ENVIRONMENT": "production",
     "FEATURE_LLM_RESEARCH": "true",
@@ -37,6 +45,5 @@
     ]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionDO", "MahoragaMcpAgent", "MahoragaHarness"] }],
-  "triggers": { "crons": ["*/5 13-20 * * 1-5", "0 14 * * 1-5", "30 21 * * 1-5", "0 5 * * *", "0 * * * *"] },
-  "build": { "command": "npm run build" }
+  "triggers": { "crons": ["*/5 13-20 * * 1-5", "0 14 * * 1-5", "30 21 * * 1-5", "0 5 * * *", "0 * * * *"] }
 }
