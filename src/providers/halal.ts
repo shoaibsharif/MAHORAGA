@@ -121,15 +121,12 @@ export class HalalScreeningService implements HalalScreening {
     try {
       // Workers' fetch throws "Illegal invocation" when called with a `this`, so call it unbound.
       const fetcher = this.fetcher;
-      const response = await fetcher(
-        `https://halalscreener.app/api/embed/badge?symbol=${encodeURIComponent(symbol)}`,
-        {
-          headers: { Accept: "application/json" },
-          signal: AbortSignal.timeout(8_000),
-          // Workers only accepts "follow" or "manual"; a redirect is then rejected by the ok check.
-          redirect: "manual",
-        }
-      );
+      const response = await fetcher(`https://halalscreener.app/api/embed/badge?symbol=${encodeURIComponent(symbol)}`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(8_000),
+        // Workers only accepts "follow" or "manual"; a redirect is then rejected by the ok check.
+        redirect: "manual",
+      });
       if (!response.ok) throw new Error(`Screening provider returned HTTP ${response.status}`);
       const data = BadgeSchema.parse(await response.json());
       if (data.symbol !== symbol) throw new Error("Screening provider returned a different symbol");

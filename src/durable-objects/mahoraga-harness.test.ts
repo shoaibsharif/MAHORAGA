@@ -136,6 +136,20 @@ describe("dynamic screened research", () => {
     expect(complete).not.toHaveBeenCalled();
   });
 
+  it("drops a failed screening once its symbol stops being rescreened, but keeps one for a held position", async () => {
+    const { harness, state, ctx } = setup();
+    const hourAgo = Date.now() - 3_600_000;
+    state.halalReports.GONE = unknownHalalReport("GONE", "Provider unavailable", hourAgo);
+    state.halalReports.HELD = unknownHalalReport("HELD", "Provider unavailable", hourAgo);
+    state.halalReports.RECENT = unknownHalalReport("RECENT", "Provider unavailable");
+    state.positionEntries.HELD = {} as AgentState["positionEntries"][string];
+    state.signalCache = [signal("DYNAMIC", 0.9)];
+    await (
+      harness as unknown as { researchTopSignals(ctx: StrategyContext, limit: number): Promise<ResearchResult[]> }
+    ).researchTopSignals(ctx, 1);
+    expect(Object.keys(state.halalReports).sort()).toEqual(["DYNAMIC", "HELD", "RECENT"]);
+  });
+
   it("filters extra analyst BUY recommendations without preventing SELL recommendations", async () => {
     const { harness, state, complete, ctx } = setup();
     state.signalResearch.DYNAMIC = {

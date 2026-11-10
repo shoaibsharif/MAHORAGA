@@ -521,8 +521,14 @@ export class MahoragaHarness extends DurableObject<Env> {
         .slice(0, 200)
         .map((entry) => entry.symbol),
     ]);
-    for (const key of Object.keys(this.state.halalReports)) {
-      if (!retained.has(key)) {
+    // A failed lookup is only retried while the symbol is still a candidate, so drop it once it goes unrefreshed.
+    const failedBefore = Date.now() - 600_000;
+    for (const [key, entry] of Object.entries(this.state.halalReports)) {
+      const abandoned =
+        entry.status === "unknown" &&
+        !(key in this.state.positionEntries) &&
+        Date.parse(entry.expiresAt) < failedBefore;
+      if (!retained.has(key) || abandoned) {
         delete this.state.halalReports[key];
         delete this.state.fundamentalResearch[key];
         delete this.state.signalResearch[key];
