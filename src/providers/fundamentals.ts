@@ -87,7 +87,11 @@ export async function getFundamentalContext(
   };
   async function json(url: string): Promise<unknown> {
     const response = await fetch(url, { headers, signal: AbortSignal.timeout(8_000), redirect: "manual" });
-    if (!response.ok) throw new Error(`SEC returned HTTP ${response.status}`);
+    if (!response.ok) {
+      // SEC's error page title says whether it rejected the client identity or the request rate.
+      const title = (await response.text().catch(() => "")).match(/<title>([^<]{1,120})/i)?.[1]?.trim();
+      throw new Error(`SEC returned HTTP ${response.status}${title ? ` (${title})` : ""}`);
+    }
     return response.json();
   }
   try {
