@@ -292,27 +292,6 @@ export const TICKER_BLACKLIST = new Set([
   "SHALL",
 ]);
 
-// ── Ticker extraction ────────────────────────────────────────────────────────
-
-/**
- * Extract tickers from text using $SYMBOL cashtags and keyword context.
- * Filters against TICKER_BLACKLIST and an optional custom blacklist.
- */
-export function extractTickers(text: string, customBlacklist: string[] = []): string[] {
-  const matches = new Set<string>();
-  const customSet = new Set(customBlacklist.map((t) => t.toUpperCase()));
-  const regex =
-    /\$([A-Z]{1,5})\b|\b([A-Z]{2,5})\b(?=\s+(?:calls?|puts?|stock|shares?|moon|rocket|yolo|buy|sell|long|short))/gi;
-  let match: RegExpExecArray | null;
-  while ((match = regex.exec(text)) !== null) {
-    const ticker = (match[1] || match[2] || "").toUpperCase();
-    if (ticker.length >= 2 && ticker.length <= 5 && !TICKER_BLACKLIST.has(ticker) && !customSet.has(ticker)) {
-      matches.add(ticker);
-    }
-  }
-  return Array.from(matches);
-}
-
 // ── Ticker validation cache ──────────────────────────────────────────────────
 
 export class ValidTickerCache {

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MAHORAGA — Open Source AI Trading Agent | LLM-Powered Autonomous Trading</title>
-  <meta name="description" content="Open-source autonomous trading agent powered by LLMs. Monitor social sentiment from StockTwits and Reddit, execute trades via Alpaca, run 24/7 on Cloudflare Workers.">
+  <meta name="description" content="Open-source autonomous trading agent powered by LLMs. Monitor social sentiment from StockTwits and SEC filings, execute trades via Alpaca, run 24/7 on Cloudflare Workers.">
   <link rel="canonical" href="https://mahoraga.dev/">
   <link rel="icon" type="image/svg+xml" href="/mahoraga.svg">
 
@@ -28,7 +28,7 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "MAHORAGA",
-    "description": "Open-source autonomous trading agent powered by LLMs. Monitors social sentiment from StockTwits and Reddit, executes trades via Alpaca, runs 24/7 on Cloudflare Workers.",
+    "description": "Open-source autonomous trading agent powered by LLMs. Monitors social sentiment from StockTwits and SEC filings, executes trades via Alpaca, runs 24/7 on Cloudflare Workers.",
     "url": "https://mahoraga.dev/",
     "applicationCategory": "FinanceApplication",
     "operatingSystem": "Cloudflare Workers",
@@ -82,7 +82,7 @@
         "name": "How does sentiment analysis work?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Monitors StockTwits and Reddit for trending tickers. Each signal is researched by the LLM before returning a confidence score."
+          "text": "Monitors StockTwits and SEC filings for trending tickers. Each signal is researched by the LLM before returning a confidence score."
         }
       },
       {
@@ -947,7 +947,7 @@
           <div class="card wide">
             <div class="card-label">How it works</div>
             <h3 class="card-title">Monitor. Analyze. Execute.</h3>
-            <p class="card-desc">The agent monitors StockTwits and Reddit for trending tickers. Each signal is researched by the LLM — analyzing sentiment, timing, catalysts, and red flags. If confidence is high enough, it executes via Alpaca and monitors the position.</p>
+            <p class="card-desc">The agent monitors StockTwits and SEC filings for trending tickers. Each signal is researched by the LLM — analyzing sentiment, timing, catalysts, and red flags. If confidence is high enough, it executes via Alpaca and monitors the position.</p>
             <div class="card-visual">
               <div class="flow" id="signal-flow">
                 <span class="flow-item" data-step="0"><span class="flow-ticker">$NVDA</span> trending</span>
@@ -1088,7 +1088,7 @@
           </div>
           <div class="faq-item">
             <div class="faq-q">How does sentiment analysis work?</div>
-            <div class="faq-a">Monitors StockTwits and Reddit for trending tickers. Each signal is researched by the LLM before returning a confidence score.</div>
+            <div class="faq-a">Monitors StockTwits and SEC filings for trending tickers. Each signal is researched by the LLM before returning a confidence score.</div>
           </div>
           <div class="faq-item">
             <div class="faq-q">Can I customize the strategy?</div>

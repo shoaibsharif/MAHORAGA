@@ -3,7 +3,7 @@
  *
  * This is the ONE line you change to use a custom strategy.
  * The default strategy ships with the repo and replicates the
- * original harness behavior (StockTwits, Reddit, SEC, crypto, Twitter).
+ * original harness behavior (StockTwits, SEC, crypto, Twitter).
  *
  * To use a custom strategy:
  *   import { myStrategy } from "./my-strategy";

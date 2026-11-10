@@ -51,7 +51,7 @@ async function gatherStockTwits(ctx: StrategyContext): Promise<Signal[]> {
     );
     if (!trendingRes) {
       ctx.log("StockTwits", "cloudflare_blocked", {
-        message: "StockTwits API blocked by Cloudflare - using Reddit only",
+        message: "StockTwits API blocked by Cloudflare",
       });
       return [];
     }

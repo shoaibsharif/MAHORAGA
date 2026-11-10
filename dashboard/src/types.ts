@@ -29,7 +29,6 @@ export interface Signal {
   bullish?: number;
   bearish?: number;
   score?: number;
-  upvotes?: number;
   isCrypto?: boolean;
   momentum?: number;
   price?: number;

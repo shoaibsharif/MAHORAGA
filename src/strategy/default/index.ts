@@ -3,7 +3,7 @@
  *
  * This is the built-in strategy that ships with Mahoraga.
  * It replicates the original harness behavior:
- *   - Gatherers: StockTwits, Reddit, SEC, Crypto
+ *   - Gatherers: StockTwits, SEC, Crypto
  *   - Research: LLM-powered signal and position analysis
  *   - Entry: Confidence threshold + Twitter confirmation
  *   - Exit: Take profit, stop loss, staleness scoring
@@ -16,7 +16,6 @@
 import type { Strategy } from "../types";
 import { DEFAULT_CONFIG } from "./config";
 import { cryptoGatherer } from "./gatherers/crypto";
-import { redditGatherer } from "./gatherers/reddit";
 import { secGatherer } from "./gatherers/sec";
 import { stocktwitsGatherer } from "./gatherers/stocktwits";
 import { analyzeSignalsPrompt } from "./prompts/analyst";
@@ -30,7 +29,7 @@ export const defaultStrategy: Strategy = {
   configSchema: null,
   defaultConfig: DEFAULT_CONFIG,
 
-  gatherers: [stocktwitsGatherer, redditGatherer, cryptoGatherer, secGatherer],
+  gatherers: [stocktwitsGatherer, cryptoGatherer, secGatherer],
 
   prompts: {
     researchSignal: researchSignalPrompt,

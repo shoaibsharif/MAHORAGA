@@ -6,14 +6,14 @@ An autonomous, LLM-powered trading agent that runs 24/7 on Cloudflare Workers.
 
 [![Discord](https://img.shields.io/discord/1467592472158015553?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/vMFnHe2YBh)
 
-MAHORAGA dynamically discovers stock candidates from StockTwits, Reddit and SEC signals, checks dated Sharia screening evidence, uses AI to research eligible companies, and executes individual-stock trades through Alpaca. It runs as a Cloudflare Durable Object with persistent state and automatic restarts.
+MAHORAGA dynamically discovers stock candidates from StockTwits and SEC signals, checks dated Sharia screening evidence, uses AI to research eligible companies, and executes individual-stock trades through Alpaca. It runs as a Cloudflare Durable Object with persistent state and automatic restarts.
 
 <img width="1278" height="957" alt="dashboard" src="https://github.com/user-attachments/assets/56473ab6-e2c6-45fc-9e32-cf85e69f1a2d" />
 
 ## Features
 
 - **24/7 Operation** — Runs on Cloudflare Workers, no local machine required
-- **Multi-Source Signals** — StockTwits, Reddit (4 subreddits), Twitter confirmation
+- **Multi-Source Signals** — StockTwits, SEC filings, Twitter confirmation
 - **Multi-Provider LLM** — OpenAI, Anthropic, Google, xAI, DeepSeek, MiniMax via AI SDK or Cloudflare AI Gateway
 - **Dynamic Halal Screening** — Dated AAOIFI screening evidence with purchase enforcement across autonomous and MCP orders
 - **Financial Research** — Public SEC financial facts and filing links supplied to the research model
@@ -185,7 +185,7 @@ export const activeStrategy = myStrategy;
 
 | Component | File | What it does |
 |-----------|------|--------------|
-| **Gatherers** | `gatherers/*.ts` | Fetch signals from data sources (StockTwits, Reddit, etc.) |
+| **Gatherers** | `gatherers/*.ts` | Fetch signals from data sources (StockTwits, SEC, etc.) |
 | **Prompts** | `prompts/*.ts` | LLM prompt templates for research and analysis |
 | **Entry rules** | `rules/entries.ts` | Decide which signals to buy |
 | **Exit rules** | `rules/exits.ts` | Decide when to sell positions |
@@ -363,7 +363,7 @@ mahoraga/
 │   │   └── default/            # Default "sentiment-momentum" strategy
 │   │       ├── index.ts        # Strategy assembly
 │   │       ├── config.ts       # Default config & source weights
-│   │       ├── gatherers/      # StockTwits, Reddit, SEC, crypto, Twitter
+│   │       ├── gatherers/      # StockTwits, SEC, crypto, Twitter
 │   │       ├── prompts/        # LLM prompt templates
 │   │       ├── rules/          # Entry/exit/staleness/options/crypto rules
 │   │       └── helpers/        # Ticker extraction, sentiment analysis

@@ -686,7 +686,6 @@ export default function App() {
                               ? [{ label: "Bearish", value: sig.bearish, color: "text-hud-error" }]
                               : []),
                             ...(sig.score !== undefined ? [{ label: "Score", value: sig.score }] : []),
-                            ...(sig.upvotes !== undefined ? [{ label: "Upvotes", value: sig.upvotes }] : []),
                             ...(sig.momentum !== undefined
                               ? [
                                   {

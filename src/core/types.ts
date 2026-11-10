@@ -26,11 +26,6 @@ export interface Signal {
   reason: string;
   timestamp: number;
   // Optional enrichment fields (gatherers add what they need)
-  upvotes?: number;
-  comments?: number;
-  quality_score?: number;
-  subreddits?: string[];
-  best_flair?: string | null;
   bullish?: number;
   bearish?: number;
   isCrypto?: boolean;

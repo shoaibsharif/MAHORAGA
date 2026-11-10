@@ -181,7 +181,7 @@
 │   │                          │       │  PolicyEngine.evaluate() │   │
 │   │  ┌────────────────────┐  │       └────────────┬─────────────┘   │
 │   │  │  Gatherers         │  │                    │                  │
-│   │  │  StockTwits, Reddit│  │                    ▼                  │
+│   │  │  StockTwits, SEC   │  │                    ▼                  │
 │   │  │  SEC, Crypto, X    │  │           ┌──────────────┐           │
 │   │  └────────┬───────────┘  │           │    Alpaca    │           │
 │   │           │              │           │    Broker    │           │
@@ -325,7 +325,7 @@ mahoraga/
 │   │   ├── types.ts            # Strategy interface contract
 │   │   ├── index.ts            # Active strategy selector
 │   │   └── default/            # Default strategy
-│   │       ├── gatherers/      # StockTwits, Reddit, SEC, crypto, Twitter
+│   │       ├── gatherers/      # StockTwits, SEC, crypto, Twitter
 │   │       ├── prompts/        # LLM prompt templates
 │   │       ├── rules/          # Entry/exit/staleness/options rules
 │   │       └── helpers/        # Ticker extraction, sentiment

@@ -945,9 +945,7 @@ export class MahoragaHarness extends DurableObject<Env> {
           entry_price: 0,
           entry_sentiment: aggregatedSocial?.sentiment ?? originalSignal?.sentiment ?? finalConfidence,
           entry_social_volume: aggregatedSocial?.volume ?? originalSignal?.volume ?? 0,
-          entry_sources: aggregatedSocial
-            ? aggregatedSocial.sources
-            : originalSignal?.subreddits || [originalSignal?.source || "research"],
+          entry_sources: aggregatedSocial ? aggregatedSocial.sources : [originalSignal?.source || "research"],
           entry_reason: entry.reason,
           peak_price: 0,
           peak_sentiment: aggregatedSocial?.sentiment ?? originalSignal?.sentiment ?? finalConfidence,
@@ -1008,9 +1006,7 @@ export class MahoragaHarness extends DurableObject<Env> {
             entry_price: 0,
             entry_sentiment: aggregatedSocial?.sentiment ?? originalSignal?.sentiment ?? rec.confidence,
             entry_social_volume: aggregatedSocial?.volume ?? originalSignal?.volume ?? 0,
-            entry_sources: aggregatedSocial
-              ? aggregatedSocial.sources
-              : originalSignal?.subreddits || [originalSignal?.source || "analyst"],
+            entry_sources: aggregatedSocial ? aggregatedSocial.sources : [originalSignal?.source || "analyst"],
             entry_reason: rec.reasoning,
             peak_price: 0,
             peak_sentiment: aggregatedSocial?.sentiment ?? originalSignal?.sentiment ?? rec.confidence,
@@ -1170,9 +1166,7 @@ export class MahoragaHarness extends DurableObject<Env> {
             entry_price: 0,
             entry_sentiment: aggregatedSocial?.sentiment ?? originalSignal?.sentiment ?? 0,
             entry_social_volume: aggregatedSocial?.volume ?? originalSignal?.volume ?? 0,
-            entry_sources: aggregatedSocial
-              ? aggregatedSocial.sources
-              : originalSignal?.subreddits || [originalSignal?.source || "premarket"],
+            entry_sources: aggregatedSocial ? aggregatedSocial.sources : [originalSignal?.source || "premarket"],
             entry_reason: rec.reasoning,
             peak_price: 0,
             peak_sentiment: aggregatedSocial?.sentiment ?? originalSignal?.sentiment ?? 0,
