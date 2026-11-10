@@ -161,13 +161,14 @@ export async function getFundamentalContext(
     ]);
     if (facts.status === "fulfilled") {
       const data = facts.value as {
-        cik?: number;
+        cik?: number | string;
         facts?: {
           "us-gaap"?: Parameters<typeof extractMetrics>[0];
           dei?: Record<string, { units?: { shares?: Fact[] } }>;
         };
       };
-      if (data.cik !== company.cik_str) throw new Error("SEC financial facts do not match the issuer");
+      // SEC sends the CIK as a number for some issuers and a zero-padded string for others.
+      if (Number(data.cik) !== company.cik_str) throw new Error("SEC financial facts do not match the issuer");
       result.metrics = extractMetrics(data.facts?.["us-gaap"] ?? {});
       result.annual = extractMetrics(data.facts?.["us-gaap"] ?? {}, true);
       result.sharesOutstanding = latestShareCount(data.facts?.dei?.EntityCommonStockSharesOutstanding?.units?.shares);

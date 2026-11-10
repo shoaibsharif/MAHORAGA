@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FundamentalContext } from "./fundamentals";
-import { computeValuation, summarizePriceHistory } from "./market-context";
+import { computeValuation, summarizePriceHistory, tradingSession } from "./market-context";
 import type { Bar } from "./types";
 
 function bars(closes: number[]): Bar[] {
@@ -80,5 +80,15 @@ describe("valuation", () => {
     expect(computeValuation(loss, 100)).toMatchObject({ priceToEarnings: null, annualNetIncomeNegative: true });
     expect(computeValuation(fundamentals({ sharesOutstanding: null }), 100)).toBeNull();
     expect(computeValuation(fundamentals(), 0)).toBeNull();
+  });
+});
+
+describe("trading session", () => {
+  it("separates regular hours from after-hours and weekend trades", () => {
+    expect(tradingSession("2026-11-10T15:00:00Z")).toBe("regular");
+    expect(tradingSession("2026-11-10T21:31:25Z")).toBe("extended");
+    expect(tradingSession("2026-11-10T14:00:00Z")).toBe("extended");
+    expect(tradingSession("2026-11-14T15:00:00Z")).toBe("extended");
+    expect(tradingSession("not a date")).toBe("unknown");
   });
 });

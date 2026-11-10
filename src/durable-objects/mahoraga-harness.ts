@@ -26,7 +26,12 @@ import { createAlpacaProviders } from "../providers/alpaca";
 import { getFundamentalContext } from "../providers/fundamentals";
 import { currentHalalReport, type HalalReport, HalalScreeningService, halalBlockReason } from "../providers/halal";
 import { createLLMProvider } from "../providers/llm/factory";
-import { computeValuation, type PriceHistory, summarizePriceHistory } from "../providers/market-context";
+import {
+  computeValuation,
+  type PriceHistory,
+  summarizePriceHistory,
+  tradingSession,
+} from "../providers/market-context";
 import type { Account, LLMProvider, MarketClock, Position } from "../providers/types";
 import type { AgentConfig } from "../schemas/agent-config";
 import { safeValidateAgentConfig } from "../schemas/agent-config";
@@ -609,6 +614,7 @@ export class MahoragaHarness extends DurableObject<Env> {
       const crypto = isCryptoSymbol(symbol, this.state.config.crypto_symbols || []);
       let price = 0;
       let priceHistory: PriceHistory | null = null;
+      let priceNote = "";
       if (crypto) {
         const snapshot = await alpaca.marketData.getCryptoSnapshot(normalizeCryptoSymbol(symbol)).catch(() => null);
         price = snapshot?.latest_trade?.price || snapshot?.latest_quote?.ask_price || 0;
@@ -624,6 +630,10 @@ export class MahoragaHarness extends DurableObject<Env> {
         ]);
         price = snapshot?.latest_trade?.price || snapshot?.latest_quote?.ask_price || 0;
         priceHistory = summarizePriceHistory(bars);
+        if (snapshot?.latest_trade?.price) {
+          const at = snapshot.latest_trade.timestamp;
+          priceNote = `The current price is the latest trade at ${at}, during ${tradingSession(at)} trading hours. A gap from the last daily close can be a genuine after-hours move.`;
+        }
       }
 
       const fundamentals = await getFundamentalContext(this.env, symbol);
@@ -638,6 +648,7 @@ export class MahoragaHarness extends DurableObject<Env> {
       prompt.system +=
         " Use the price history to judge whether the move has already happened, and the valuation multiples to judge whether the price is justified.";
       prompt.user += `\n\nDATED SCREENING EVIDENCE:\n${JSON.stringify(halal)}\n\nSEC FINANCIAL CONTEXT:\n${JSON.stringify(fundamentals)}`;
+      if (priceNote) prompt.user += `\n\nCURRENT PRICE NOTE: ${priceNote}`;
       prompt.user += `\n\nPRICE HISTORY (Alpaca daily bars, split-adjusted; percentages):\n${priceHistory ? JSON.stringify(priceHistory) : "Unavailable"}`;
       prompt.user += `\n\nVALUATION (computed from SEC figures and the current price):\n${valuation ? JSON.stringify(valuation) : "Unavailable: share count or price missing"}`;
 

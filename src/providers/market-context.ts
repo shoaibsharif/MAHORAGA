@@ -80,3 +80,23 @@ export function computeValuation(fundamentals: FundamentalContext, price: number
     basis: `Shares outstanding ${shares.value} as of ${shares.end} times the current price; revenue and earnings from the fiscal year ending ${period ?? "unavailable"}. Companies with several share classes may be undercounted.`,
   };
 }
+
+/** Whether a trade happened in the regular New York session (9:30 to 16:00 on a weekday). */
+export function tradingSession(timestamp: string): "regular" | "extended" | "unknown" {
+  const time = Date.parse(timestamp);
+  if (!Number.isFinite(time)) return "unknown";
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date(time))
+      .map((part) => [part.type, part.value])
+  );
+  if (parts.weekday === "Sat" || parts.weekday === "Sun") return "extended";
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  return minutes >= 570 && minutes < 960 ? "regular" : "extended";
+}
