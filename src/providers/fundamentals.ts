@@ -86,7 +86,7 @@ export async function getFundamentalContext(
     Accept: "application/json",
   };
   async function json(url: string): Promise<unknown> {
-    const response = await fetch(url, { headers, signal: AbortSignal.timeout(8_000), redirect: "error" });
+    const response = await fetch(url, { headers, signal: AbortSignal.timeout(8_000), redirect: "manual" });
     if (!response.ok) throw new Error(`SEC returned HTTP ${response.status}`);
     return response.json();
   }

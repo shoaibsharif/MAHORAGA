@@ -126,7 +126,8 @@ export class HalalScreeningService implements HalalScreening {
         {
           headers: { Accept: "application/json" },
           signal: AbortSignal.timeout(8_000),
-          redirect: "error",
+          // Workers only accepts "follow" or "manual"; a redirect is then rejected by the ok check.
+          redirect: "manual",
         }
       );
       if (!response.ok) throw new Error(`Screening provider returned HTTP ${response.status}`);

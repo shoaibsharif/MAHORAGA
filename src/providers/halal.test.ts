@@ -42,6 +42,7 @@ describe("live halal evidence", () => {
     const { service, fetcher } = provider(badge());
     await service.screen("TEST");
     expect(fetcher.mock.contexts[0]).toBeUndefined();
+    expect(fetcher.mock.calls[0]?.[1]?.redirect).toBe("manual");
   });
 
   it.each([
