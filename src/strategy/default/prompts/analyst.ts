@@ -2,6 +2,7 @@
  * Analyst prompt builder — batch signal analysis for trading decisions.
  */
 
+import { newYorkDate } from "../../../core/settlement";
 import { getSleeve } from "../../../core/sleeve";
 import type { Account, Position, Signal } from "../../../core/types";
 import type { AnalyzeSignalsPromptBuilder, PromptTemplate, StrategyContext } from "../../types";
@@ -53,7 +54,8 @@ ${
           const entry = ctx.positionEntries[p.symbol];
           const holdMinutes = entry ? Math.round((Date.now() - entry.entry_time) / (1000 * 60)) : 0;
           const holdStr = holdMinutes >= 60 ? `${(holdMinutes / 60).toFixed(1)}h` : `${holdMinutes}m`;
-          return `- ${p.symbol}: ${p.qty} shares, P&L: $${p.unrealized_pl.toFixed(2)} (${((p.unrealized_pl / (p.market_value - p.unrealized_pl)) * 100).toFixed(1)}%), held ${holdStr}`;
+          const boughtToday = entry && newYorkDate(entry.entry_time) === newYorkDate(Date.now());
+          return `- ${p.symbol}: ${p.qty} shares, P&L: $${p.unrealized_pl.toFixed(2)} (${((p.unrealized_pl / (p.market_value - p.unrealized_pl)) * 100).toFixed(1)}%), held ${holdStr}${boughtToday ? " [BOUGHT TODAY: cannot be sold until the next trading day]" : ""}`;
         })
         .join("\n")
 }
@@ -79,6 +81,7 @@ TRADING RULES:
 - Stop loss: ${ctx.config.stop_loss_pct}%
 - Min confidence to trade: ${ctx.config.min_analyst_confidence}
 - Min hold time before selling: ${ctx.config.llm_min_hold_minutes ?? 30} minutes
+- Shares bought today are never sold the same day; a SELL for them is held back until the next trading day
 
 Analyze and provide BUY/SELL/HOLD recommendations:`;
 

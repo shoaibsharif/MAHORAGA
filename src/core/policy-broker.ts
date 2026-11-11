@@ -20,6 +20,7 @@ import type { RiskState } from "../storage/d1/queries/risk-state";
 import { getRiskState, recordDailyLoss, setCooldown } from "../storage/d1/queries/risk-state";
 import { isCryptoSymbol, normalizeCryptoSymbol } from "../strategy/default/helpers/crypto";
 import type { StrategyContext } from "../strategy/types";
+import { boughtToday } from "./settlement";
 import { getSleeve, roundCents } from "./sleeve";
 
 export interface PolicyBrokerDeps {
@@ -229,6 +230,7 @@ export function createPolicyBroker(deps: PolicyBrokerDeps): StrategyContext["bro
     // Closing a position is risk-reducing — blocking exits on kill switch
     // or cooldown would trap users in losing positions.
     // We only check kill switch to log a warning (but still execute).
+    // The one thing that does hold back an exit is the settlement rule below.
     try {
       if (db) {
         const riskState = await getRiskStateOrDefault();
@@ -238,6 +240,25 @@ export function createPolicyBroker(deps: PolicyBrokerDeps): StrategyContext["bro
             reason,
             note: "Executing sell despite kill switch — closing positions is risk-reducing",
           });
+        }
+      }
+
+      // Shares bought today have not settled, so every automatic exit waits for the next trading day,
+      // stop-loss included. If the orders cannot be read the sale fails and is retried next cycle.
+      if (!isCryptoSymbol(symbol, deps.cryptoSymbols)) {
+        const recentOrders = await alpaca.trading.listOrders({
+          status: "all",
+          symbols: [symbol],
+          after: new Date(Date.now() - 86_400_000).toISOString(),
+          limit: 100,
+        });
+        if (boughtToday(recentOrders)) {
+          log("PolicyBroker", "sell_deferred", {
+            symbol,
+            reason: "Bought today; it can be sold from the next trading day",
+            wanted: reason,
+          });
+          return false;
         }
       }
 

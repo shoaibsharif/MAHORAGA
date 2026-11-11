@@ -126,9 +126,55 @@ describe("trading sleeve", () => {
   });
 });
 
-function setupSleeve(options: { maxPositionPct?: number; positions?: Array<Record<string, unknown>> } = {}) {
+describe("holding a purchase until it settles", () => {
+  const position = { symbol: "TEST", unrealized_pl: -2.5, market_value: 7.5, cost_basis: 10 };
+  const buy = (filledAt: string, filledQty = "0.5") => ({
+    side: "buy",
+    filled_qty: filledQty,
+    filled_at: filledAt,
+    submitted_at: filledAt,
+  });
+
+  it("does not sell shares bought earlier the same day, even at the stop loss", async () => {
+    const harness = setupSleeve({ positions: [position], orders: [buy(new Date().toISOString())] });
+    expect(await harness.broker.sell("TEST", "Stop loss at -25.0%")).toBe(false);
+    expect(harness.closePosition).not.toHaveBeenCalled();
+    expect(harness.realizedPnl).toBe(0);
+    expect(harness.listOrders).toHaveBeenCalledWith(expect.objectContaining({ symbols: ["TEST"], status: "all" }));
+  });
+
+  it("sells once the purchase is from an earlier day", async () => {
+    const harness = setupSleeve({
+      positions: [position],
+      // An unfilled order from today and a sale from today do not count as a purchase.
+      orders: [
+        buy(new Date(Date.now() - 3 * 86_400_000).toISOString()),
+        buy(new Date().toISOString(), "0"),
+        { ...buy(new Date().toISOString()), side: "sell" },
+      ],
+    });
+    expect(await harness.broker.sell("TEST", "Stop loss at -25.0%")).toBe(true);
+    expect(harness.closePosition).toHaveBeenCalledWith("TEST");
+  });
+
+  it("does not sell when the purchase date cannot be confirmed", async () => {
+    const harness = setupSleeve({ positions: [position] });
+    harness.listOrders.mockRejectedValueOnce(new Error("orders unavailable"));
+    expect(await harness.broker.sell("TEST", "Stop loss at -25.0%")).toBe(false);
+    expect(harness.closePosition).not.toHaveBeenCalled();
+  });
+});
+
+function setupSleeve(
+  options: {
+    maxPositionPct?: number;
+    positions?: Array<Record<string, unknown>>;
+    orders?: Array<Record<string, unknown>>;
+  } = {}
+) {
   const createOrder = vi.fn().mockResolvedValue({ status: "new" });
   const closePosition = vi.fn().mockResolvedValue({});
+  const listOrders = vi.fn().mockResolvedValue(options.orders ?? []);
   let reserved = 0;
   let realizedPnl = 0;
   const risk = {
@@ -157,6 +203,7 @@ function setupSleeve(options: { maxPositionPct?: number; positions?: Array<Recor
       getClock: vi.fn().mockResolvedValue({ is_open: true }),
       createOrder,
       closePosition,
+      listOrders,
     },
   } as unknown as AlpacaProviders;
   const broker = createPolicyBroker({
@@ -182,6 +229,8 @@ function setupSleeve(options: { maxPositionPct?: number; positions?: Array<Recor
   return {
     broker,
     createOrder,
+    closePosition,
+    listOrders,
     run,
     risk,
     get realizedPnl() {

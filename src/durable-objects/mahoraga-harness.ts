@@ -170,7 +170,17 @@ export class MahoragaHarness extends DurableObject<Env> {
       alpaca,
       policyConfig,
       db,
-      log: (agent, action, details) => self.log(agent, action, details),
+      log: (agent, action, details) => {
+        // A deferred sale is retried every cycle; one notice an hour per stock keeps the feed readable.
+        const hourAgo = Date.now() - 3_600_000;
+        const alreadyNoted =
+          action === "sell_deferred" &&
+          self.state.logs.some(
+            (entry) =>
+              entry.action === action && entry.symbol === details.symbol && Date.parse(entry.timestamp) > hourAgo
+          );
+        if (!alreadyNoted) self.log(agent, action, details);
+      },
       cryptoSymbols: self.state.config.crypto_symbols || [],
       allowedExchanges: self.state.config.allowed_exchanges ?? ["NYSE", "NASDAQ", "ARCA", "AMEX", "BATS"],
       // A purchase needs evidence the provider confirmed within the hour, whatever is stored.

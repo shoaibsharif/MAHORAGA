@@ -240,7 +240,7 @@ See `docs/harness.html` for the full customization guide.
 | `starting_equity` | 100 | Sleeve bankroll. Agent P&L compounds on top of this |
 | `position_size_pct_of_cash` | 10 | Cash percentage used to size entries before confidence adjustment |
 | `take_profit_pct` | 10 | Take profit percentage |
-| `stop_loss_pct` | 5 | Stop loss percentage |
+| `stop_loss_pct` | 5 | Stop loss percentage (waits for the next trading day if the shares were bought today) |
 | `min_sentiment_score` | 0.3 | Minimum sentiment to consider |
 | `min_analyst_confidence` | 0.6 | Minimum LLM confidence to trade |
 | `options_enabled` | false | Enable options trading |
@@ -391,6 +391,7 @@ mahoraga/
 | Position Limits | Max positions and $ per position |
 | Daily Loss Limit | Stops trading after 2% daily loss |
 | Staleness Detection | Auto-exit stale positions |
+| Settled Sales Only | Shares bought today are not sold until the next trading day, stop loss included |
 | No Margin | Cash-only trading |
 | No Shorting | Long positions only |
 
