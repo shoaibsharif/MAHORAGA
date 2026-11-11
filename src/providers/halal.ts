@@ -10,11 +10,12 @@ export const HALAL_CACHE_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * How old a provider's own assessment may be. HalalScreener re-dates its badge often;
- * halal.sh only recomputes when a company files, so its assessments stay valid for a quarter.
+ * halal.sh only recomputes when a company files. The longest gap between filings is from the
+ * third-quarter report to the annual report, about 110 days, so 150 leaves room for its analysis.
  */
 const MAX_ASSESSMENT_AGE_MS: Record<string, number> = {
   [HALAL_PROVIDER]: HALAL_REPORT_MAX_AGE_MS,
-  [HALAL_SH_PROVIDER]: 100 * DAY_MS,
+  [HALAL_SH_PROVIDER]: 150 * DAY_MS,
 };
 /** A verdict changes when a company files, not within hours, so failed and uncovered results are kept. */
 const SETTLED_TTL_MS = 6 * 60 * 60 * 1000;

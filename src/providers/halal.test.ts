@@ -153,6 +153,11 @@ function halalShProvider(body: unknown, status = 200) {
 }
 
 describe("halal.sh evidence", () => {
+  it("still accepts a determination from the previous quarter's filing", async () => {
+    const { service } = halalShProvider(halalSh({ as_of: new Date(Date.now() - 120 * 86_400_000).toISOString() }));
+    expect(halalBlockReason(await service.screen("TEST"), "TEST")).toBeNull();
+  });
+
   it("accepts a month-old compliant determination with its ratios and purification rate", async () => {
     const { service, fetcher } = halalShProvider(halalSh());
     const report = await service.screen("test");
@@ -181,7 +186,10 @@ describe("halal.sh evidence", () => {
     ["fund methodology", halalSh({ methodology: "aaoifi-ss57@2026.1" })],
     ["different issuer", halalSh({ symbol: "OTHER" })],
     ["undated determination", halalSh({ as_of: null })],
-    ["determination older than a quarter", halalSh({ as_of: new Date(Date.now() - 101 * 86_400_000).toISOString() })],
+    [
+      "determination older than two filing periods",
+      halalSh({ as_of: new Date(Date.now() - 151 * 86_400_000).toISOString() }),
+    ],
     ["ratio contradicting the verdict", halalSh({ screens: { debt_to_market_cap: { result: "pass", value: 0.5 } } })],
   ])("blocks a %s", async (_name, body) => {
     const { service } = halalShProvider(body);
