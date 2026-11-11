@@ -52,7 +52,6 @@ function setup() {
     signalCache: [],
     signalResearch: {},
     halalReports: {},
-    fundamentalResearch: {},
   };
   const harness = Object.assign(Object.create(MahoragaHarness.prototype), {
     state,

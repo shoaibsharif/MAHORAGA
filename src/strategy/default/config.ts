@@ -96,7 +96,6 @@ export const DEFAULT_STATE: AgentState = {
   lastPositionResearchRun: 0,
   signalResearch: {},
   halalReports: {},
-  fundamentalResearch: {},
   lastHalalReviewRun: 0,
   lastAnalystModelCall: 0,
   positionResearch: {},

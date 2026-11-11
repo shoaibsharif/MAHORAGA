@@ -27,8 +27,27 @@ export interface FundamentalContext {
   /** Full fiscal-year figures from the latest annual report, for valuation multiples. */
   annual?: Record<string, FinancialMetric>;
   sharesOutstanding?: { value: number; end: string; filed: string } | null;
+  /** Recent quarters and fiscal years, oldest first, so growth and margins can be judged. */
+  trend?: FinancialTrend | null;
   filings: Array<{ form: string; filed: string; url: string }>;
   limitations: string[];
+}
+
+export interface TrendPeriod {
+  end: string;
+  revenue: number | null;
+  netIncome: number | null;
+  /** Net income as a percent of revenue. */
+  netMarginPct: number | null;
+  /** Revenue change from the same period a year earlier. */
+  revenueYoYPct: number | null;
+  /** Fourth quarters are not filed separately; they are the fiscal year minus the first three quarters. */
+  derived?: true;
+}
+
+export interface FinancialTrend {
+  quarters: TrendPeriod[];
+  fiscalYears: Array<TrendPeriod & { operatingCashFlow: number | null }>;
 }
 
 const ANNUAL_FORMS = ["10-K", "10-K/A"];
@@ -86,6 +105,82 @@ export function extractMetrics(
   return metrics;
 }
 
+type FactSet = Record<string, { units?: { USD?: Fact[] } }>;
+const TREND_TAGS = {
+  revenue: ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet"],
+  netIncome: ["NetIncomeLoss", "ProfitLoss"],
+  operatingCashFlow: ["NetCashProvidedByUsedInOperatingActivities"],
+};
+const pct = (part: number | null, whole: number | null): number | null =>
+  part == null || !whole ? null : Number(((part / whole) * 100).toFixed(1));
+
+/** Values for periods of the given length, keyed by end date. A restated figure replaces the original. */
+function periodValues(facts: FactSet, tags: string[], minDays: number, maxDays: number): Map<string, Fact> {
+  const byEnd = new Map<string, Fact>();
+  // Earlier tags are the current standard, so they win when two tags report the same period.
+  for (const tag of [...tags].reverse()) {
+    const candidates = (facts[tag]?.units?.USD ?? [])
+      .filter((fact) => {
+        if (!Number.isFinite(fact.val) || !fact.start || Date.parse(fact.end) > Date.now()) return false;
+        const days = (Date.parse(fact.end) - Date.parse(fact.start)) / DAY_MS;
+        return days >= minDays && days <= maxDays;
+      })
+      .sort((a, b) => a.filed.localeCompare(b.filed));
+    for (const fact of candidates) byEnd.set(fact.end, fact);
+  }
+  return byEnd;
+}
+
+/** Up to eight recent quarters and four fiscal years of revenue, earnings and operating cash flow. */
+export function extractTrend(facts: FactSet): FinancialTrend | null {
+  const series = (tags: string[], annual: boolean) =>
+    annual ? periodValues(facts, tags, 340, 380) : periodValues(facts, tags, 80, 100);
+  const quarterly = { revenue: series(TREND_TAGS.revenue, false), netIncome: series(TREND_TAGS.netIncome, false) };
+  const yearly = {
+    revenue: series(TREND_TAGS.revenue, true),
+    netIncome: series(TREND_TAGS.netIncome, true),
+    operatingCashFlow: series(TREND_TAGS.operatingCashFlow, true),
+  };
+
+  const derived = new Set<string>();
+  for (const metric of ["revenue", "netIncome"] as const) {
+    for (const [end, year] of yearly[metric]) {
+      if (quarterly[metric].has(end) || !year.start) continue;
+      const within = [...quarterly[metric].values()].filter((q) => q.end > (year.start ?? "") && q.end < end);
+      if (within.length !== 3) continue;
+      quarterly[metric].set(end, { ...year, val: year.val - within.reduce((sum, q) => sum + q.val, 0) });
+      derived.add(end);
+    }
+  }
+
+  const yearAgo = (values: Map<string, Fact>, end: string): number | null => {
+    const target = Date.parse(end) - 365 * DAY_MS;
+    for (const [other, fact] of values) if (Math.abs(Date.parse(other) - target) <= 20 * DAY_MS) return fact.val;
+    return null;
+  };
+  const period = (values: { revenue: Map<string, Fact>; netIncome: Map<string, Fact> }, end: string): TrendPeriod => {
+    const revenue = values.revenue.get(end)?.val ?? null;
+    const netIncome = values.netIncome.get(end)?.val ?? null;
+    const prior = yearAgo(values.revenue, end);
+    return {
+      end,
+      revenue,
+      netIncome,
+      netMarginPct: revenue && revenue > 0 ? pct(netIncome, revenue) : null,
+      revenueYoYPct: revenue != null && prior && prior > 0 ? pct(revenue - prior, prior) : null,
+      ...(derived.has(end) && values === quarterly ? { derived: true as const } : {}),
+    };
+  };
+  const ends = (...maps: Array<Map<string, Fact>>) => [...new Set(maps.flatMap((map) => [...map.keys()]))].sort();
+  const quarters = ends(quarterly.revenue, quarterly.netIncome)
+    .slice(-8)
+    .map((end) => period(quarterly, end));
+  const fiscalYears = ends(yearly.revenue, yearly.netIncome)
+    .slice(-4)
+    .map((end) => ({ ...period(yearly, end), operatingCashFlow: yearly.operatingCashFlow.get(end)?.val ?? null }));
+  return quarters.length || fiscalYears.length ? { quarters, fiscalYears } : null;
+}
+
 /** The most recent cover-page share count; several classes reported on one date are summed. */
 export function latestShareCount(facts: Fact[] = []): FundamentalContext["sharesOutstanding"] {
   const valid = facts.filter(
@@ -139,7 +234,9 @@ export async function getFundamentalContext(
   try {
     const cached = await getStoredFundamentals(env.DB, symbol).catch(() => null);
     // SEC figures change when a company files, so a day-old copy is current enough.
-    if (cached?.symbol === symbol && Date.now() - Date.parse(cached.checkedAt) < 86_400_000) return cached;
+    // A copy stored before trends were added has no `trend` key and is fetched again.
+    if (cached?.symbol === symbol && "trend" in cached && Date.now() - Date.parse(cached.checkedAt) < 86_400_000)
+      return cached;
     let tickers = await env.CACHE.get<Record<string, { cik_str: number; ticker: string; title: string }>>(
       "fundamentals:sec:tickers",
       "json"
@@ -172,6 +269,7 @@ export async function getFundamentalContext(
       if (Number(data.cik) !== company.cik_str) throw new Error("SEC financial facts do not match the issuer");
       result.metrics = extractMetrics(data.facts?.["us-gaap"] ?? {});
       result.annual = extractMetrics(data.facts?.["us-gaap"] ?? {}, true);
+      result.trend = extractTrend(data.facts?.["us-gaap"] ?? {});
       result.sharesOutstanding = latestShareCount(data.facts?.dei?.EntityCommonStockSharesOutstanding?.units?.shares);
     } else result.limitations.push("SEC financial facts unavailable");
     if (submissions.status === "fulfilled") {
