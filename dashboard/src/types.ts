@@ -229,8 +229,9 @@ export interface HalalReport {
   name: string | null;
   provider: string;
   methodology: string;
-  status: "compliant" | "non_compliant" | "questionable" | "unknown" | "stale" | "unsupported";
+  status: "compliant" | "non_compliant" | "questionable" | "unknown" | "stale" | "recheck_due" | "unsupported";
   screenedAt: string | null;
+  checkedAt: string;
   expiresAt: string;
   sourceUrl: string;
   reasons: string[];

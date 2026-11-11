@@ -24,7 +24,14 @@ import type { Env } from "../env.d";
 import { getDefaultPolicyConfig } from "../policy/config";
 import { createAlpacaProviders } from "../providers/alpaca";
 import { getFundamentalContext } from "../providers/fundamentals";
-import { createHalalScreening, currentHalalReport, type HalalReport, halalBlockReason } from "../providers/halal";
+import {
+  createHalalScreening,
+  currentHalalReport,
+  HALAL_CACHE_MS,
+  type HalalReport,
+  halalBlockReason,
+  type ScreenOptions,
+} from "../providers/halal";
 import { createLLMProvider } from "../providers/llm/factory";
 import {
   computeValuation,
@@ -167,7 +174,8 @@ export class MahoragaHarness extends DurableObject<Env> {
       log: (agent, action, details) => self.log(agent, action, details),
       cryptoSymbols: self.state.config.crypto_symbols || [],
       allowedExchanges: self.state.config.allowed_exchanges ?? ["NYSE", "NASDAQ", "ARCA", "AMEX", "BATS"],
-      screening: { screen: (symbol) => self.screenSymbol(symbol) },
+      // A purchase needs evidence the provider confirmed within the hour, whatever is stored.
+      screening: { screen: (symbol) => self.screenSymbol(symbol, { maxCheckAgeMs: HALAL_CACHE_MS }) },
       sleeve: {
         getStartingEquity: () => self.state.config.starting_equity,
         getRealizedPnl: () => self.state.realizedPnl,
@@ -518,8 +526,8 @@ export class MahoragaHarness extends DurableObject<Env> {
   // LLM RESEARCH — uses strategy prompt builders
   // ============================================================================
 
-  private async screenSymbol(symbol: string): Promise<HalalReport> {
-    const report = await this.screening.screen(symbol);
+  private async screenSymbol(symbol: string, options?: ScreenOptions): Promise<HalalReport> {
+    const report = await this.screening.screen(symbol, options);
     const previous = this.state.halalReports[report.symbol];
     this.state.halalReports[report.symbol] = report;
     const retained = new Set([

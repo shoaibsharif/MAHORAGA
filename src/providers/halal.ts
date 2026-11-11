@@ -17,6 +17,15 @@ const MAX_ASSESSMENT_AGE_MS: Record<string, number> = {
   [HALAL_PROVIDER]: HALAL_REPORT_MAX_AGE_MS,
   [HALAL_SH_PROVIDER]: 150 * DAY_MS,
 };
+/**
+ * How long a compliant verdict may be relied on before the provider is asked again. halal.sh
+ * changes a verdict only when a company files, so a daily check is enough; purchases always
+ * ask for a check made within the hour.
+ */
+const RECHECK_MS: Record<string, number> = {
+  [HALAL_PROVIDER]: HALAL_CACHE_MS,
+  [HALAL_SH_PROVIDER]: DAY_MS,
+};
 /** A verdict changes when a company files, not within hours, so failed and uncovered results are kept. */
 const SETTLED_TTL_MS = 6 * 60 * 60 * 1000;
 const RETRY_TTL_MS = 120_000;
@@ -57,7 +66,8 @@ export interface HalalReport {
   name: string | null;
   provider: string;
   methodology: string;
-  status: "compliant" | "non_compliant" | "questionable" | "unknown" | "stale" | "unsupported";
+  /** `recheck_due` is a compliant verdict whose last provider check is too old to buy on. */
+  status: "compliant" | "non_compliant" | "questionable" | "unknown" | "stale" | "recheck_due" | "unsupported";
   assetType: string | null;
   screenedAt: string | null;
   checkedAt: string;
@@ -70,8 +80,13 @@ export interface HalalReport {
   confidence?: number | null;
 }
 
+export interface ScreenOptions {
+  /** Ask the provider again unless the stored result was checked within this many milliseconds. */
+  maxCheckAgeMs?: number;
+}
+
 export interface HalalScreening {
-  screen(symbol: string): Promise<HalalReport>;
+  screen(symbol: string, options?: ScreenOptions): Promise<HalalReport>;
 }
 
 export function unknownHalalReport(
@@ -100,10 +115,22 @@ export function unknownHalalReport(
   };
 }
 
+const RECHECK_DUE = "Compliant when last checked; a fresh check is due before buying";
+
 export function halalBlockReason(report: HalalReport | undefined, symbol: string, now = Date.now()): string | null {
+  return evidenceProblem(report, symbol, now, true);
+}
+
+function evidenceProblem(
+  report: HalalReport | undefined,
+  symbol: string,
+  now: number,
+  requireRecentCheck: boolean
+): string | null {
   if (!report || report.symbol !== symbol.trim().toUpperCase()) return "No matching halal screening evidence";
   const maxAge = MAX_ASSESSMENT_AGE_MS[report.provider];
-  if (!maxAge || report.methodology !== HALAL_METHODOLOGY) return "Unrecognized screening authority";
+  const recheck = RECHECK_MS[report.provider];
+  if (!maxAge || !recheck || report.methodology !== HALAL_METHODOLOGY) return "Unrecognized screening authority";
   if (report.status !== "compliant") return report.reasons?.join("; ") || `Screening status: ${report.status}`;
   if (report.assetType !== "stock") return "Only individual company stocks are eligible";
   if (!report.metrics) return "Screening evidence has an invalid financial-data shape";
@@ -119,14 +146,18 @@ export function halalBlockReason(report: HalalReport | undefined, symbol: string
   if (!Number.isFinite(screened) || !Number.isFinite(checked) || !Number.isFinite(expires))
     return "Undated screening evidence";
   if (screened > now + 300_000 || checked > now + 300_000) return "Screening evidence is dated in the future";
-  if (now - screened >= maxAge || now - checked >= HALAL_CACHE_MS || expires <= now)
-    return "Screening evidence has expired";
+  if (now - screened >= maxAge) return "Screening evidence has expired";
+  if (requireRecentCheck && (now - checked >= recheck || expires <= now)) return RECHECK_DUE;
   return null;
 }
 
 export function currentHalalReport(report: HalalReport, now = Date.now()): HalalReport {
+  if (report.status !== "compliant") return report;
   const reason = halalBlockReason(report, report.symbol, now);
-  return report.status === "compliant" && reason ? { ...report, status: "stale", reasons: [reason] } : report;
+  if (!reason) return report;
+  // Sound evidence that only needs a fresh provider check is not the same as failed evidence.
+  const onlyCheckAge = evidenceProblem(report, report.symbol, now, false) === null;
+  return { ...report, status: onlyCheckAge ? "recheck_due" : "stale", reasons: [reason] };
 }
 
 /** A provider answered, but has no verdict to give; asking again soon won't change that. */
@@ -145,7 +176,7 @@ export class HalalScreeningService implements HalalScreening {
     this.provider = halalShKey ? HALAL_SH_PROVIDER : HALAL_PROVIDER;
   }
 
-  async screen(input: string): Promise<HalalReport> {
+  async screen(input: string, options: ScreenOptions = {}): Promise<HalalReport> {
     const symbol = input.trim().toUpperCase();
     if (!SYMBOL.test(symbol)) {
       return {
@@ -153,17 +184,21 @@ export class HalalScreeningService implements HalalScreening {
         status: "unsupported",
       };
     }
-    const existing = this.pending.get(symbol);
+    const key = `${symbol}:${options.maxCheckAgeMs ?? ""}`;
+    const existing = this.pending.get(key);
     if (existing) return existing;
-    const request = this.load(symbol).finally(() => this.pending.delete(symbol));
-    this.pending.set(symbol, request);
+    const request = this.load(symbol, options).finally(() => this.pending.delete(key));
+    this.pending.set(key, request);
     return request;
   }
 
-  private async load(symbol: string): Promise<HalalReport> {
+  private async load(symbol: string, options: ScreenOptions): Promise<HalalReport> {
     try {
       const cached = await this.store?.get(symbol);
-      const usable = cached?.symbol === symbol && cached.provider === this.provider;
+      const recentEnough =
+        options.maxCheckAgeMs === undefined ||
+        (!!cached && Date.now() - Date.parse(cached.checkedAt) < options.maxCheckAgeMs);
+      const usable = cached?.symbol === symbol && cached.provider === this.provider && recentEnough;
       if (usable && cached.status === "stale" && Date.now() - Date.parse(cached.checkedAt) < RETRY_TTL_MS)
         return cached;
       if (usable && Array.isArray(cached.reasons) && Date.parse(cached.expiresAt) > Date.now()) {
@@ -220,12 +255,13 @@ export class HalalScreeningService implements HalalScreening {
     }
   ): HalalReport {
     const maxAge = MAX_ASSESSMENT_AGE_MS[this.provider] ?? HALAL_REPORT_MAX_AGE_MS;
+    const recheck = RECHECK_MS[this.provider] ?? HALAL_CACHE_MS;
     return {
       ...unknownHalalReport(symbol, "", now, this.provider),
       ...fields,
       screenedAt: new Date(screened).toISOString(),
       expiresAt: new Date(
-        fields.status === "compliant" ? Math.min(now + HALAL_CACHE_MS, screened + maxAge) : now + SETTLED_TTL_MS
+        fields.status === "compliant" ? Math.min(now + recheck, screened + maxAge) : now + SETTLED_TTL_MS
       ).toISOString(),
     };
   }

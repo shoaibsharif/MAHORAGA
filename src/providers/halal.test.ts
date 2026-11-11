@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  currentHalalReport,
   HALAL_CACHE_MS,
   HALAL_REPORT_MAX_AGE_MS,
   HALAL_SH_PROVIDER,
@@ -201,5 +202,30 @@ describe("halal.sh evidence", () => {
       const { service } = halalShProvider({ error: { code: "x", message: "y" } }, status);
       expect((await service.screen("TEST")).status).toBe("unknown");
     }
+  });
+
+  it("relies on a compliant verdict for a day, then asks for a re-check without calling it failed", async () => {
+    const { service } = halalShProvider(halalSh());
+    const report = await service.screen("TEST");
+    const hours = (count: number) => Date.now() + count * 3_600_000;
+    expect(halalBlockReason(report, "TEST", hours(2))).toBeNull();
+    expect(halalBlockReason(report, "TEST", hours(25))).not.toBeNull();
+    expect(currentHalalReport(report, hours(25)).status).toBe("recheck_due");
+    // An assessment that is itself too old is a real failure, not a pending re-check.
+    expect(currentHalalReport(report, hours(24 * 130)).status).toBe("stale");
+  });
+
+  it("asks the provider again before a purchase when the stored check is over an hour old", async () => {
+    const { service } = halalShProvider(halalSh());
+    const stored = await service.screen("TEST");
+    stored.checkedAt = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    const store = { get: vi.fn().mockResolvedValue(stored), put: vi.fn() };
+    const fetcher = vi.fn().mockImplementation(async () => new Response(JSON.stringify(halalSh())));
+    const cached = new HalalScreeningService(store, fetcher, "hsh_test_key");
+    await cached.screen("TEST");
+    expect(fetcher).not.toHaveBeenCalled();
+    const fresh = await cached.screen("TEST", { maxCheckAgeMs: 3_600_000 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(Date.now() - Date.parse(fresh.checkedAt)).toBeLessThan(60_000);
   });
 });

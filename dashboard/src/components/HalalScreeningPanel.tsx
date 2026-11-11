@@ -7,6 +7,7 @@ const labels: Record<HalalReport["status"], string> = {
   questionable: "Blocked: review required",
   unknown: "Blocked: no valid evidence",
   stale: "Blocked: invalid or expired evidence",
+  recheck_due: "Compliant when last checked",
   unsupported: "Blocked: outside stock portfolio",
 };
 
@@ -19,8 +20,8 @@ export function HalalScreeningPanel({ reports }: { reports?: Record<string, Hala
   return (
     <Panel title="HALAL SCREENING" titleRight="INDIVIDUAL STOCKS">
       <p className="text-sm text-hud-text-dim mb-4">
-        Candidates are discovered dynamically. Purchases require a current AAOIFI screen from HalalScreener. Missing
-        evidence blocks purchases; exits remain available.
+        Candidates are discovered dynamically. Purchases require an AAOIFI screen confirmed with the provider within the
+        hour. Missing evidence blocks purchases; exits remain available.
       </p>
       {entries.length === 0 ? (
         <p className="text-sm text-hud-text">
@@ -30,12 +31,15 @@ export function HalalScreeningPanel({ reports }: { reports?: Record<string, Hala
         <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {entries.map((report) => {
             const status =
-              report.status === "compliant" && Date.parse(report.expiresAt) <= Date.now() ? "stale" : report.status;
+              report.status === "compliant" && Date.parse(report.expiresAt) <= Date.now()
+                ? "recheck_due"
+                : report.status;
+            const passed = status === "compliant" || status === "recheck_due";
             return (
               <li key={report.symbol} className="border border-hud-line/30 rounded p-3 min-w-0">
                 <div className="flex flex-wrap justify-between gap-2 mb-2">
                   <span className="font-semibold text-hud-text break-all">{report.symbol}</span>
-                  <span className={status === "compliant" ? "text-hud-success text-sm" : "text-hud-warning text-sm"}>
+                  <span className={passed ? "text-hud-success text-sm" : "text-hud-warning text-sm"}>
                     {labels[status]}
                   </span>
                 </div>
@@ -44,7 +48,8 @@ export function HalalScreeningPanel({ reports }: { reports?: Record<string, Hala
                   {report.provider} ·{" "}
                   {report.screenedAt
                     ? `Screened ${new Date(report.screenedAt).toLocaleDateString()}`
-                    : "Screening date unavailable"}
+                    : "Screening date unavailable"}{" "}
+                  · Last checked {new Date(report.checkedAt).toLocaleString()}
                 </p>
                 <dl className="text-sm mt-2 space-y-1">
                   <div className="flex flex-wrap justify-between gap-2">
