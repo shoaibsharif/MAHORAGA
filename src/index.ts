@@ -1,12 +1,13 @@
+import { createMcpHandler } from "agents/mcp/server";
 import { getHarnessStub } from "./durable-objects/mahoraga-harness";
 import { checkRateLimit, incrementRequest } from "./durable-objects/session";
 import type { Env } from "./env.d";
 import { handleCronEvent } from "./jobs/cron";
-import { MahoragaMcpAgent } from "./mcp/agent";
+import { createMahoragaMcpServer } from "./mcp/agent";
 
 export { MahoragaHarness } from "./durable-objects/mahoraga-harness";
+export { MahoragaMcpAgent } from "./durable-objects/retired-mcp-agent";
 export { SessionDO } from "./durable-objects/session";
-export { MahoragaMcpAgent };
 
 function constantTimeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -72,7 +73,7 @@ export default {
       if (!isAuthorized(request, env)) {
         return unauthorizedResponse();
       }
-      return MahoragaMcpAgent.serve("/mcp", { binding: "MCP_AGENT" }).fetch(request, env, ctx);
+      return createMcpHandler(() => createMahoragaMcpServer(env))(request, env, ctx);
     }
 
     const agentPrefix = url.pathname === "/api" || url.pathname.startsWith("/api/") ? "/api" : "/agent";

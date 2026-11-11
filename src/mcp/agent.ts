@@ -1,5 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { McpAgent } from "agents/mcp";
+import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { Env } from "../env.d";
 import { ErrorCode } from "../lib/errors";
@@ -40,11 +39,20 @@ import { createTrade } from "../storage/d1/queries/trades";
 import type { OptionsOrderPreview } from "./types";
 import { failure, success } from "./types";
 
-export class MahoragaMcpAgent extends McpAgent<Env> {
+/** Builds a fresh MCP server; the stateless handler calls this once per request. */
+export async function createMahoragaMcpServer(env: Env): Promise<McpServer> {
+  const mcp = new MahoragaMcp(env);
+  await mcp.init();
+  return mcp.server;
+}
+
+export class MahoragaMcp {
   server = new McpServer({
     name: "mahoraga",
     version: "0.1.0",
   });
+
+  constructor(private env: Env) {}
 
   private requestId: string = "";
   private policyConfig: PolicyConfig | null = null;
@@ -92,7 +100,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "auth-verify",
       {
         description: "Verify that Alpaca API credentials are valid",
-        inputSchema: {},
+        inputSchema: z.object({}),
       },
       async () => {
         const startTime = Date.now();
@@ -132,7 +140,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "user-get",
       {
         description: "Get user/session information and system configuration",
-        inputSchema: {},
+        inputSchema: z.object({}),
       },
       async () => {
         const result = success({
@@ -161,7 +169,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "accounts-get",
       {
         description: "Get detailed account information including buying power and equity",
-        inputSchema: {},
+        inputSchema: z.object({}),
       },
       async () => {
         const startTime = Date.now();
@@ -195,7 +203,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "portfolio-get",
       {
         description: "Get comprehensive portfolio snapshot with positions and summary",
-        inputSchema: {},
+        inputSchema: z.object({}),
       },
       async () => {
         const startTime = Date.now();
@@ -265,7 +273,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "positions-list",
       {
         description: "List all current positions",
-        inputSchema: { symbol: z.string().optional() },
+        inputSchema: z.object({ symbol: z.string().optional() }),
       },
       async ({ symbol }) => {
         try {
@@ -305,11 +313,11 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "positions-close",
       {
         description: "Close a position (bypasses preview/submit but checks kill switch)",
-        inputSchema: {
+        inputSchema: z.object({
           symbol: z.string(),
           qty: z.number().positive().optional(),
           percentage: z.number().min(0).max(100).optional(),
-        },
+        }),
       },
       async ({ symbol, qty, percentage }) => {
         try {
@@ -360,7 +368,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "orders-preview",
       {
         description: "Preview order and get approval token. Does NOT execute. Use orders-submit with the token.",
-        inputSchema: {
+        inputSchema: z.object({
           symbol: z.string().min(1).max(10),
           side: z.enum(["buy", "sell"]),
           qty: z.number().positive().optional(),
@@ -369,7 +377,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
           limit_price: z.number().positive().optional(),
           stop_price: z.number().positive().optional(),
           time_in_force: z.enum(["day", "gtc", "ioc", "fok"]).default("day"),
-        },
+        }),
       },
       async (input) => {
         const startTime = Date.now();
@@ -487,7 +495,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "orders-submit",
       {
         description: "Execute order with valid approval token from orders-preview",
-        inputSchema: { approval_token: z.string().min(1) },
+        inputSchema: z.object({ approval_token: z.string().min(1) }),
       },
       async ({ approval_token }) => {
         const startTime = Date.now();
@@ -633,10 +641,10 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "orders-list",
       {
         description: "List orders",
-        inputSchema: {
+        inputSchema: z.object({
           status: z.enum(["open", "closed", "all"]).default("open"),
           limit: z.number().min(1).max(500).default(50),
-        },
+        }),
       },
       async ({ status, limit }) => {
         try {
@@ -672,7 +680,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "orders-cancel",
       {
         description: "Cancel an order by ID",
-        inputSchema: { order_id: z.string() },
+        inputSchema: z.object({ order_id: z.string() }),
       },
       async ({ order_id }) => {
         try {
@@ -705,7 +713,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "risk-status",
       {
         description: "Get current risk status and limits",
-        inputSchema: {},
+        inputSchema: z.object({}),
       },
       async () => {
         try {
@@ -749,7 +757,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "kill-switch-enable",
       {
         description: "Enable kill switch to halt all trading",
-        inputSchema: { reason: z.string().min(1) },
+        inputSchema: z.object({ reason: z.string().min(1) }),
       },
       async ({ reason }) => {
         try {
@@ -781,10 +789,10 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "kill-switch-disable",
       {
         description: "Disable kill switch (requires secret verification)",
-        inputSchema: {
+        inputSchema: z.object({
           confirmation: z.string(),
           secret_hash: z.string(),
-        },
+        }),
       },
       async ({ confirmation, secret_hash }) => {
         try {
@@ -841,7 +849,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "help-usage",
       {
         description: "Get help information about using Mahoraga",
-        inputSchema: {},
+        inputSchema: z.object({}),
       },
       async () => {
         const result = success({
@@ -858,7 +866,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "catalog-list",
       {
         description: "List all available tools",
-        inputSchema: {},
+        inputSchema: z.object({}),
       },
       async () => {
         const catalog = [
@@ -907,7 +915,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "memory-log-trade",
       {
         description: "Log a trade entry to the journal for later analysis",
-        inputSchema: {
+        inputSchema: z.object({
           symbol: z.string().min(1),
           side: z.enum(["buy", "sell"]),
           qty: z.number().positive(),
@@ -917,7 +925,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
           technicals: z.record(z.string(), z.unknown()).optional(),
           regime_tags: z.array(z.string()).optional(),
           notes: z.string().optional(),
-        },
+        }),
       },
       async (input) => {
         try {
@@ -958,7 +966,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "memory-log-outcome",
       {
         description: "Log the outcome of a previously logged trade",
-        inputSchema: {
+        inputSchema: z.object({
           journal_id: z.string().min(1),
           exit_price: z.number().positive(),
           pnl_usd: z.number(),
@@ -966,7 +974,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
           hold_duration_mins: z.number().nonnegative(),
           outcome: z.enum(["win", "loss", "scratch"]),
           lessons_learned: z.string().optional(),
-        },
+        }),
       },
       async (input) => {
         try {
@@ -1000,13 +1008,13 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "memory-query",
       {
         description: "Query journal entries and trading statistics",
-        inputSchema: {
+        inputSchema: z.object({
           symbol: z.string().optional(),
           outcome: z.enum(["win", "loss", "scratch"]).optional(),
           regime_tag: z.string().optional(),
           days: z.number().min(1).max(365).default(30),
           limit: z.number().min(1).max(100).default(20),
-        },
+        }),
       },
       async (input) => {
         try {
@@ -1046,7 +1054,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "memory-summarize",
       {
         description: "Use LLM to analyze trading history and extract patterns (requires LLM feature)",
-        inputSchema: { days: z.number().min(1).max(365).default(30) },
+        inputSchema: z.object({ days: z.number().min(1).max(365).default(30) }),
       },
       async (_input) => {
         if (!this.llm) {
@@ -1102,7 +1110,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "memory-set-preferences",
       {
         description: "Store user trading preferences",
-        inputSchema: { preferences: z.record(z.string(), z.unknown()) },
+        inputSchema: z.object({ preferences: z.record(z.string(), z.unknown()) }),
       },
       async ({ preferences }) => {
         try {
@@ -1130,7 +1138,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "memory-get-preferences",
       {
         description: "Get stored user trading preferences",
-        inputSchema: {},
+        inputSchema: z.object({}),
       },
       async () => {
         try {
@@ -1156,7 +1164,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "symbol-overview",
       {
         description: "Get comprehensive overview of a symbol including price, position, and recent bars",
-        inputSchema: { symbol: z.string().min(1) },
+        inputSchema: z.object({ symbol: z.string().min(1) }),
       },
       async ({ symbol }) => {
         const startTime = Date.now();
@@ -1212,11 +1220,11 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "prices-bars",
       {
         description: "Get historical price bars for a symbol",
-        inputSchema: {
+        inputSchema: z.object({
           symbol: z.string().min(1),
           timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
           limit: z.number().min(1).max(1000).default(100),
-        },
+        }),
       },
       async ({ symbol, timeframe, limit }) => {
         try {
@@ -1251,7 +1259,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "market-clock",
       {
         description: "Get current market clock status",
-        inputSchema: {},
+        inputSchema: z.object({}),
       },
       async () => {
         try {
@@ -1275,7 +1283,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "market-movers",
       {
         description: "Get top gainers and losers from watchlist symbols",
-        inputSchema: { symbols: z.array(z.string()).min(1).max(50) },
+        inputSchema: z.object({ symbols: z.array(z.string()).min(1).max(50) }),
       },
       async ({ symbols }) => {
         try {
@@ -1311,7 +1319,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "quotes-batch",
       {
         description: "Get latest quotes for multiple symbols",
-        inputSchema: { symbols: z.array(z.string()).min(1).max(100) },
+        inputSchema: z.object({ symbols: z.array(z.string()).min(1).max(100) }),
       },
       async ({ symbols }) => {
         try {
@@ -1342,7 +1350,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "market-quote",
       {
         description: "Get a quote for a single symbol (stocks or crypto)",
-        inputSchema: { symbol: z.string().min(1) },
+        inputSchema: z.object({ symbol: z.string().min(1) }),
       },
       async ({ symbol }) => {
         try {
@@ -1389,10 +1397,10 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "technicals-get",
       {
         description: "Calculate technical indicators for a symbol",
-        inputSchema: {
+        inputSchema: z.object({
           symbol: z.string().min(1),
           timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
-        },
+        }),
       },
       async ({ symbol, timeframe }) => {
         try {
@@ -1432,10 +1440,10 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "signals-get",
       {
         description: "Detect trading signals from technical indicators for a symbol",
-        inputSchema: {
+        inputSchema: z.object({
           symbol: z.string().min(1),
           timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
-        },
+        }),
       },
       async ({ symbol, timeframe }) => {
         try {
@@ -1487,10 +1495,10 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "signals-batch",
       {
         description: "Detect trading signals for multiple symbols at once",
-        inputSchema: {
+        inputSchema: z.object({
           symbols: z.array(z.string()).min(1).max(20),
           timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
-        },
+        }),
       },
       async ({ symbols, timeframe }) => {
         try {
@@ -1532,11 +1540,11 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "events-ingest",
       {
         description: "Manually ingest a raw event for processing",
-        inputSchema: {
+        inputSchema: z.object({
           source: z.string().min(1),
           source_id: z.string().min(1),
           content: z.string().min(1),
-        },
+        }),
       },
       async ({ source, source_id, content }) => {
         try {
@@ -1567,12 +1575,12 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "events-list",
       {
         description: "List structured events with optional filtering",
-        inputSchema: {
+        inputSchema: z.object({
           event_type: z.string().optional(),
           symbol: z.string().optional(),
           validated: z.boolean().optional(),
           limit: z.number().min(1).max(100).default(20),
-        },
+        }),
       },
       async (input) => {
         try {
@@ -1605,10 +1613,10 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "events-classify",
       {
         description: "Use LLM to classify raw content into structured event (requires LLM feature)",
-        inputSchema: {
+        inputSchema: z.object({
           content: z.string().min(1),
           store: z.boolean().default(true),
-        },
+        }),
       },
       async ({ content, store }) => {
         if (!this.llm) {
@@ -1665,11 +1673,11 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "news-list",
       {
         description: "List recent news items with optional filtering",
-        inputSchema: {
+        inputSchema: z.object({
           symbol: z.string().optional(),
           source: z.string().optional(),
           limit: z.number().min(1).max(100).default(20),
-        },
+        }),
       },
       async (input) => {
         try {
@@ -1699,7 +1707,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "news-index",
       {
         description: "Manually index a news item",
-        inputSchema: {
+        inputSchema: z.object({
           source: z.string().min(1),
           source_id: z.string().min(1),
           headline: z.string().min(1),
@@ -1707,7 +1715,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
           url: z.string().url().optional(),
           symbols: z.array(z.string()).default([]),
           published_at: z.string().optional(),
-        },
+        }),
       },
       async (input) => {
         try {
@@ -1749,7 +1757,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       {
         description:
           "Get dated AAOIFI screening evidence for an individual stock. Unknown, questionable, stale and unsupported results block purchases.",
-        inputSchema: { symbol: z.string().min(1).max(15) },
+        inputSchema: z.object({ symbol: z.string().min(1).max(15) }),
       },
       async ({ symbol }) => ({
         content: [{ type: "text" as const, text: JSON.stringify(success(await this.getScreening().screen(symbol))) }],
@@ -1759,7 +1767,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "symbol-research",
       {
         description: "Generate comprehensive research report for a symbol (requires LLM feature)",
-        inputSchema: { symbol: z.string().min(1) },
+        inputSchema: z.object({ symbol: z.string().min(1) }),
       },
       async ({ symbol }) => {
         const startTime = Date.now();
@@ -1840,10 +1848,10 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       {
         description:
           "Scrape financial data from allowed domains (finance.yahoo.com, sec.gov, stockanalysis.com, companiesmarketcap.com)",
-        inputSchema: {
+        inputSchema: z.object({
           url: z.string().url(),
           symbol: z.string().optional(),
-        },
+        }),
       },
       async ({ url, symbol }) => {
         if (!isAllowedDomain(url)) {
@@ -1892,7 +1900,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "options-expirations",
       {
         description: "Get available option expiration dates for a symbol",
-        inputSchema: { underlying: z.string().min(1) },
+        inputSchema: z.object({ underlying: z.string().min(1) }),
       },
       async ({ underlying }) => {
         if (!this.options || !this.options.isConfigured()) {
@@ -1938,10 +1946,10 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "options-chain",
       {
         description: "Get options chain for a symbol and expiration",
-        inputSchema: {
+        inputSchema: z.object({
           underlying: z.string().min(1),
           expiration: z.string().min(1),
-        },
+        }),
       },
       async ({ underlying, expiration }) => {
         if (!this.options || !this.options.isConfigured()) {
@@ -1980,7 +1988,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "options-snapshot",
       {
         description: "Get current snapshot for an options contract",
-        inputSchema: { contract_symbol: z.string().min(1) },
+        inputSchema: z.object({ contract_symbol: z.string().min(1) }),
       },
       async ({ contract_symbol }) => {
         if (!this.options || !this.options.isConfigured()) {
@@ -2020,14 +2028,14 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       {
         description:
           "Preview options order and get approval token. Does NOT execute. Use options-order-submit with the token.",
-        inputSchema: {
+        inputSchema: z.object({
           contract_symbol: z.string().min(1),
           side: z.enum(["buy", "sell"]),
           qty: z.number().int().positive(),
           order_type: z.enum(["market", "limit"]),
           limit_price: z.number().positive().optional(),
           time_in_force: z.enum(["day", "gtc"]).default("day"),
-        },
+        }),
       },
       async (input) => {
         const startTime = Date.now();
@@ -2166,7 +2174,7 @@ export class MahoragaMcpAgent extends McpAgent<Env> {
       "options-order-submit",
       {
         description: "Execute options order with valid approval token from options-order-preview",
-        inputSchema: { approval_token: z.string().min(1) },
+        inputSchema: z.object({ approval_token: z.string().min(1) }),
       },
       async ({ approval_token }) => {
         const startTime = Date.now();

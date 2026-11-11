@@ -12,7 +12,9 @@ vi.mock("./durable-objects/session", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
   incrementRequest: vi.fn(),
 }));
-vi.mock("./mcp/agent", () => ({ MahoragaMcpAgent: class {} }));
+vi.mock("./mcp/agent", () => ({ createMahoragaMcpServer: vi.fn() }));
+vi.mock("./durable-objects/retired-mcp-agent", () => ({ MahoragaMcpAgent: class {} }));
+vi.mock("agents/mcp/server", () => ({ createMcpHandler: vi.fn() }));
 vi.mock("./jobs/cron", () => ({ handleCronEvent: vi.fn() }));
 
 const context = {} as ExecutionContext;

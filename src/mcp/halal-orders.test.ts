@@ -5,9 +5,8 @@ import { getDefaultPolicyConfig } from "../policy/config";
 import type { AlpacaProviders } from "../providers/alpaca";
 import { type HalalReport, unknownHalalReport } from "../providers/halal";
 import type { D1Client } from "../storage/d1/client";
-import { MahoragaMcpAgent } from "./agent";
+import { MahoragaMcp } from "./agent";
 
-vi.mock("agents/mcp", () => ({ McpAgent: class {} }));
 vi.mock("../policy/approval", () => ({
   validateApprovalToken: vi.fn(),
   generateApprovalToken: vi.fn(),
@@ -36,12 +35,12 @@ function setup() {
     },
   } as unknown as AlpacaProviders;
   const screen = vi.fn().mockResolvedValue(unknownHalalReport("TEST", "Provider unavailable"));
-  const agent = Object.assign(Object.create(MahoragaMcpAgent.prototype), {
+  const agent = Object.assign(Object.create(MahoragaMcp.prototype), {
     env: {} as Env,
     policyConfig: getDefaultPolicyConfig({} as Env),
     screening: { screen },
     server: { registerTool: (name: string, _options: unknown, handler: Handler) => handlers.set(name, handler) },
-  }) as MahoragaMcpAgent;
+  }) as MahoragaMcp;
   const db = { run: vi.fn() } as unknown as D1Client;
   (agent as unknown as { registerOrderTools(db: D1Client, alpaca: AlpacaProviders): void }).registerOrderTools(
     db,
