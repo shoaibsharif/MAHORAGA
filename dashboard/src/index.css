@@ -33,7 +33,7 @@
   
   html {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 16px;
     background-color: var(--color-hud-bg);
     color: var(--color-hud-text);
     letter-spacing: 0.05em;
@@ -67,14 +67,14 @@
   }
   
   .hud-label {
-    font-size: 8px;
+    font-size: 0.6875rem;
     text-transform: uppercase;
     letter-spacing: 0.15em;
     color: var(--color-hud-text-dim);
   }
   
   .hud-value-xl {
-    font-size: 36px;
+    font-size: 2.25rem;
     font-weight: 300;
     letter-spacing: -0.02em;
     line-height: 1;
@@ -82,7 +82,7 @@
   }
   
   .hud-value-lg {
-    font-size: 24px;
+    font-size: 1.5rem;
     font-weight: 300;
     letter-spacing: -0.01em;
     line-height: 1;
@@ -90,14 +90,14 @@
   }
   
   .hud-value-md {
-    font-size: 14px;
+    font-size: 1rem;
     font-weight: 400;
     line-height: 1;
     color: var(--color-hud-text);
   }
   
   .hud-value-sm {
-    font-size: 11px;
+    font-size: 0.8125rem;
     font-weight: 400;
     line-height: 1;
     color: var(--color-hud-text);
@@ -108,7 +108,7 @@
     border: 0.5px solid var(--color-hud-line);
     color: var(--color-hud-text);
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 0.875rem;
     padding: 6px 10px;
     outline: none;
     transition: border-color 0.2s;
@@ -123,7 +123,7 @@
     border: 0.5px solid var(--color-hud-primary);
     color: var(--color-hud-primary);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 8px 16px;

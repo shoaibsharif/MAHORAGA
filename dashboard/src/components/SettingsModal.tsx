@@ -70,7 +70,7 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                 Save & Reload
               </button>
             </div>
-            <p className="text-[9px] text-hud-text-dim mt-1">
+            <p className="text-[0.6875rem] text-hud-text-dim mt-1">
               Your MAHORAGA_API_TOKEN from Cloudflare secrets. Required for all API access.
             </p>
           </div>
@@ -95,7 +95,7 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                     handleChange("max_position_value", e.target.value === "" ? null : Number(e.target.value))
                   }
                 />
-                <p id="position-dollar-cap-help" className="text-[9px] text-hud-text-dim mt-1">
+                <p id="position-dollar-cap-help" className="text-[0.6875rem] text-hud-text-dim mt-1">
                   Leave blank to use percentage and cash limits.
                 </p>
               </div>
@@ -220,7 +220,7 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                   value={localConfig.premarket_plan_window_minutes ?? 5}
                   onChange={(e) => handleChange("premarket_plan_window_minutes", Number(e.target.value))}
                 />
-                <p className="text-[9px] text-hud-text-dim mt-1">
+                <p className="text-[0.6875rem] text-hud-text-dim mt-1">
                   Generate a plan when within N minutes of the next market open.
                 </p>
               </div>
@@ -234,7 +234,7 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                   value={localConfig.market_open_execute_window_minutes ?? 2}
                   onChange={(e) => handleChange("market_open_execute_window_minutes", Number(e.target.value))}
                 />
-                <p className="text-[9px] text-hud-text-dim mt-1">
+                <p className="text-[0.6875rem] text-hud-text-dim mt-1">
                   Execute the plan if the market is open and within this window.
                 </p>
               </div>
@@ -260,7 +260,7 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                       <option value={localConfig.llm_provider}>Custom (backend configured)</option>
                     )}
                 </select>
-                <p className="text-[9px] text-hud-text-dim mt-1">
+                <p className="text-[0.6875rem] text-hud-text-dim mt-1">
                   {localConfig.llm_provider === "ai-sdk" &&
                     "Supports: OpenAI, Anthropic, Google, xAI, DeepSeek, MiniMax"}
                   {(!localConfig.llm_provider || localConfig.llm_provider === "openai-raw") &&
@@ -539,7 +539,7 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                   />
                   <span className="hud-label">Enable Crypto Trading</span>
                 </label>
-                <p className="text-[9px] text-hud-text-dim mt-1">
+                <p className="text-[0.6875rem] text-hud-text-dim mt-1">
                   Unavailable in this individual-stock halal portfolio.
                 </p>
               </div>
@@ -649,7 +649,7 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                   onChange={(e) => handleChange("stale_social_volume_decay", Number(e.target.value))}
                   disabled={!localConfig.stale_position_enabled}
                 />
-                <p className="text-[9px] text-hud-text-dim mt-1">Exit if volume drops to this % of entry</p>
+                <p className="text-[0.6875rem] text-hud-text-dim mt-1">Exit if volume drops to this % of entry</p>
               </div>
             </div>
           </div>

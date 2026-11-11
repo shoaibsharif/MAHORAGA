@@ -1,12 +1,13 @@
 import clsx from "clsx";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { HalalScreeningPanel } from "./components/HalalScreeningPanel";
 import { LineChart, Sparkline } from "./components/LineChart";
 import { Metric, MetricInline } from "./components/Metric";
 import { NotificationBell } from "./components/NotificationBell";
 import { Panel } from "./components/Panel";
 import { SettingsModal } from "./components/SettingsModal";
+import { ResearchDetailModal } from "./components/ResearchDetailModal";
 import { SetupWizard } from "./components/SetupWizard";
 import { StatusBar, StatusIndicator } from "./components/StatusIndicator";
 import { Tooltip, TooltipContent } from "./components/Tooltip";
@@ -144,6 +145,8 @@ export default function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [openResearch, setOpenResearch] = useState<string | null>(null);
+  const closeResearch = useCallback(() => setOpenResearch(null), []);
   const [showSetup, setShowSetup] = useState(false);
   const [setupChecked, setSetupChecked] = useState(false);
   const [time, setTime] = useState(new Date());
@@ -669,6 +672,7 @@ export default function App() {
                     <Tooltip
                       key={`${sig.symbol}-${sig.source}-${i}`}
                       position="right"
+                      block
                       content={
                         <TooltipContent
                           title={`${sig.symbol} - ${sig.source.toUpperCase()}`}
@@ -758,13 +762,13 @@ export default function App() {
                         animate={{ opacity: 1 }}
                         className="flex items-start gap-2 py-1 border-b border-hud-line/10"
                       >
-                        <span className="text-hud-text-dim shrink-0 hidden sm:inline w-[52px]">
+                        <span className="text-hud-text-dim shrink-0 hidden sm:inline w-[9ch]">
                           {new Date(log.timestamp).toLocaleTimeString("en-US", { hour12: false })}
                         </span>
-                        <span className={clsx("shrink-0 w-[72px] text-right", getAgentColor(log.agent))}>
+                        <span className={clsx("shrink-0 w-[17ch] truncate text-right", getAgentColor(log.agent))}>
                           {log.agent}
                         </span>
-                        <span className="text-hud-text flex-1 text-right wrap-break-word">
+                        <span className="text-hud-text flex-1 min-w-0 text-right wrap-break-word">
                           {log.action}
                           {log.symbol && <span className="text-hud-primary ml-1">({log.symbol})</span>}
                         </span>
@@ -788,87 +792,35 @@ export default function App() {
                   Object.entries(status?.signalResearch || {})
                     .sort(([, a], [, b]) => b.timestamp - a.timestamp)
                     .map(([symbol, research]: [string, SignalResearch]) => (
-                      <Tooltip
+                      <motion.button
                         key={symbol}
-                        position="left"
-                        content={
-                          <div className="space-y-2 min-w-[200px]">
-                            <div className="hud-label text-hud-primary border-b border-hud-line/50 pb-1">
-                              {symbol} DETAILS
-                            </div>
-                            <div className="space-y-1">
-                              <div className="flex justify-between">
-                                <span className="text-hud-text-dim">Confidence</span>
-                                <span className="text-hud-text-bright">{(research.confidence * 100).toFixed(0)}%</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-hud-text-dim">Sentiment</span>
-                                <span className={getSentimentColor(research.sentiment)}>
-                                  {(research.sentiment * 100).toFixed(0)}%
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-hud-text-dim">Analyzed</span>
-                                <span className="text-hud-text">
-                                  {new Date(research.timestamp).toLocaleTimeString("en-US", { hour12: false })}
-                                </span>
-                              </div>
-                            </div>
-                            {research.catalysts.length > 0 && (
-                              <div className="pt-1 border-t border-hud-line/30">
-                                <span className="text-[9px] text-hud-text-dim">CATALYSTS:</span>
-                                <ul className="mt-1 space-y-0.5">
-                                  {research.catalysts.map((c, i) => (
-                                    <li key={i} className="text-[10px] text-hud-success">
-                                      + {c}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {research.red_flags.length > 0 && (
-                              <div className="pt-1 border-t border-hud-line/30">
-                                <span className="text-[9px] text-hud-text-dim">RED FLAGS:</span>
-                                <ul className="mt-1 space-y-0.5">
-                                  {research.red_flags.map((f, i) => (
-                                    <li key={i} className="text-[10px] text-hud-error">
-                                      - {f}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        }
+                        type="button"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        onClick={() => setOpenResearch(symbol)}
+                        aria-haspopup="dialog"
+                        className="block w-full text-left p-2 border border-hud-line/30 rounded hover:border-hud-line/60 focus-visible:outline focus-visible:outline-2 cursor-pointer transition-colors"
                       >
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          className="p-2 border border-hud-line/30 rounded hover:border-hud-line/60 cursor-help transition-colors"
-                        >
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="hud-value-sm">{symbol}</span>
-                            <div className="flex items-center gap-2">
-                              <span className={clsx("hud-label", getQualityColor(research.entry_quality))}>
-                                {research.entry_quality.toUpperCase()}
-                              </span>
-                              <span className={clsx("hud-value-sm font-bold", getVerdictColor(research.verdict))}>
-                                {research.verdict}
-                              </span>
-                            </div>
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="hud-value-sm">{symbol}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={clsx("hud-label", getQualityColor(research.entry_quality))}>
+                              {research.entry_quality.toUpperCase()}
+                            </span>
+                            <span className={clsx("hud-value-sm font-bold", getVerdictColor(research.verdict))}>
+                              {research.verdict}
+                            </span>
                           </div>
-                          <p className="text-xs text-hud-text-dim leading-tight mb-1">{research.reasoning}</p>
-                          {research.red_flags.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {research.red_flags.slice(0, 2).map((flag, i) => (
-                                <span key={i} className="text-xs text-hud-error bg-hud-error/10 px-1 rounded">
-                                  {flag.slice(0, 30)}...
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </motion.div>
-                      </Tooltip>
+                        </div>
+                        <p className="text-xs text-hud-text-dim leading-snug mb-1 line-clamp-3">{research.reasoning}</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-hud-error truncate min-w-0">
+                            {research.red_flags.length > 0 &&
+                              `${research.red_flags.length} red flag${research.red_flags.length === 1 ? "" : "s"}`}
+                          </span>
+                          <span className="hud-label text-hud-primary shrink-0">Details ›</span>
+                        </div>
+                      </motion.button>
                     ))
                 )}
               </div>
@@ -879,6 +831,14 @@ export default function App() {
         <div className="mt-4">
           <HalalScreeningPanel reports={status?.halalReports} />
         </div>
+
+        {openResearch && status?.signalResearch?.[openResearch] && (
+          <ResearchDetailModal
+            symbol={openResearch}
+            research={status.signalResearch[openResearch]}
+            onClose={closeResearch}
+          />
+        )}
 
         <footer className="mt-4 pt-3 border-t border-hud-line flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <div className="flex flex-wrap gap-4 md:gap-6">

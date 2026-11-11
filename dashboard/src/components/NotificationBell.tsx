@@ -72,7 +72,7 @@ export function NotificationBell({ overnightActivity, premarketPlan }: Notificat
           <motion.span
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-hud-error text-[9px] font-bold rounded-full flex items-center justify-center text-white"
+            className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-hud-error text-[0.6875rem] font-bold rounded-full flex items-center justify-center text-white"
           >
             {unreadCount > 9 ? '9+' : unreadCount}
           </motion.span>
@@ -91,7 +91,7 @@ export function NotificationBell({ overnightActivity, premarketPlan }: Notificat
             <div className="px-3 py-2 border-b border-hud-line flex justify-between items-center">
               <span className="hud-label">OVERNIGHT ACTIVITY</span>
               {overnightActivity?.lastUpdated && (
-                <span className="text-[9px] text-hud-text-dim">
+                <span className="text-[0.6875rem] text-hud-text-dim">
                   {formatTime(overnightActivity.lastUpdated)}
                 </span>
               )}
@@ -128,7 +128,7 @@ export function NotificationBell({ overnightActivity, premarketPlan }: Notificat
                     <div className="flex items-center justify-between mb-2">
                       <span className="hud-label">PRE-MARKET PLAN</span>
                       <span className={clsx(
-                        'text-[9px] px-1.5 py-0.5 rounded',
+                        'text-[0.6875rem] px-1.5 py-0.5 rounded',
                         overnightActivity?.premarketPlanReady
                           ? 'bg-hud-success/20 text-hud-success'
                           : 'bg-hud-text-dim/20 text-hud-text-dim'
@@ -139,7 +139,7 @@ export function NotificationBell({ overnightActivity, premarketPlan }: Notificat
 
                     {premarketPlan && premarketPlan.highConvictionPlays?.length > 0 && (
                       <div className="space-y-1">
-                        <span className="text-[9px] text-hud-text-dim">HIGH CONVICTION:</span>
+                        <span className="text-[0.6875rem] text-hud-text-dim">HIGH CONVICTION:</span>
                         <div className="flex flex-wrap gap-1">
                           {premarketPlan.highConvictionPlays.map((symbol) => (
                             <span 
@@ -154,7 +154,7 @@ export function NotificationBell({ overnightActivity, premarketPlan }: Notificat
                     )}
 
                     {premarketPlan?.marketOutlook && (
-                      <p className="text-[10px] text-hud-text-dim mt-2 leading-tight">
+                      <p className="text-xs text-hud-text-dim mt-2 leading-tight">
                         {premarketPlan.marketOutlook.slice(0, 100)}
                         {premarketPlan.marketOutlook.length > 100 && '...'}
                       </p>

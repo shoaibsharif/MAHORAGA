@@ -162,6 +162,8 @@ interface TooltipProps {
   position?: TooltipPosition
   delay?: number
   className?: string
+  /** Make the trigger a full-width row instead of an inline box. */
+  block?: boolean
 }
 
 export function Tooltip({ 
@@ -169,7 +171,8 @@ export function Tooltip({
   content, 
   position = 'top',
   delay = 200,
-  className = ''
+  className = '',
+  block = false
 }: TooltipProps) {
   const { triggerRef, triggerProps, tooltipProps } = useTooltip<HTMLDivElement>({ position, delay })
 
@@ -178,7 +181,7 @@ export function Tooltip({
       <div
         ref={triggerRef}
         {...triggerProps}
-        className="inline-block"
+        className={block ? "block" : "inline-block"}
       >
         {children}
       </div>
@@ -214,7 +217,7 @@ export function TooltipContent({ title, items, description }: TooltipContentProp
       )}
       
       {description && (
-        <p className="text-hud-text-dim text-[10px] leading-tight">
+        <p className="text-hud-text-dim text-xs leading-tight">
           {description}
         </p>
       )}

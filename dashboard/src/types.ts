@@ -107,8 +107,33 @@ export interface SignalResearch {
   reasoning: string;
   red_flags: string[];
   catalysts: string[];
-  sentiment: number;
+  sentiment?: number;
   timestamp: number;
+  halal?: HalalReport;
+  priceHistory?: {
+    lastClose: number;
+    returnPct: { d5: number | null; d20: number | null; d60: number | null };
+    belowHighPct: number;
+    vsMovingAveragePct: { sma20: number | null; sma50: number | null; sma200: number | null };
+    rsi14: number | null;
+    relativeVolume: number | null;
+  } | null;
+  valuation?: {
+    marketCapUsd: number;
+    priceToSales: number | null;
+    priceToEarnings: number | null;
+    annualNetIncomeNegative: boolean;
+  } | null;
+  fundamentals?: {
+    trend?: {
+      quarters: Array<{
+        end: string;
+        revenue: number | null;
+        netMarginPct: number | null;
+        revenueYoYPct: number | null;
+      }>;
+    } | null;
+  };
 }
 
 export interface PositionResearch {
