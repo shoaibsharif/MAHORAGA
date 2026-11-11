@@ -151,6 +151,8 @@ curl -H "Authorization: Bearer $MAHORAGA_TOKEN" "$MAHORAGA_URL/agent/logs"
 curl -H "Authorization: Bearer $KILL_SWITCH_SECRET" "$MAHORAGA_URL/agent/kill"
 ```
 
+The dashboard at your Worker's URL can be installed as an app: use **Install** in Chrome or Edge, or **Share → Add to Home Screen** in Safari on iPhone. A service worker caches the app's own files so it opens without a connection, but it never caches trading data; when the agent can't be reached, the dashboard says so instead of showing old figures as current.
+
 ## Local Development
 
 `wrangler dev` uses the same `wrangler.jsonc` with local D1, KV and R2, and reads secrets from `.dev.vars`. It serves `dashboard/dist`, so build the dashboard once first (step 1), then apply migrations to the local database:
