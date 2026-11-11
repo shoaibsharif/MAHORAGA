@@ -31,9 +31,9 @@ export interface PolicyBrokerDeps {
   allowedExchanges: string[];
   screening?: HalalScreening;
   /** Called after a successful buy order */
-  onBuy?: (symbol: string, notional: number) => void;
+  onBuy?: (symbol: string, notional: number, reason: string) => void;
   /** Called after a successful sell/close order */
-  onSell?: (symbol: string, reason: string) => void;
+  onSell?: (symbol: string, reason: string, pnl: number | null) => void;
   /**
    * When set, buys and risk checks use this bankroll instead of the full broker account.
    * Realized P&L is reported back so the sleeve compounds after closes.
@@ -206,7 +206,7 @@ export function createPolicyBroker(deps: PolicyBrokerDeps): StrategyContext["bro
       cachedAccount = null;
       cachedPositions = null;
 
-      deps.onBuy?.(symbol, notional);
+      deps.onBuy?.(symbol, notional, reason);
       return true;
     } catch (error) {
       log("PolicyBroker", "buy_failed", { symbol, error: String(error) });
@@ -269,7 +269,7 @@ export function createPolicyBroker(deps: PolicyBrokerDeps): StrategyContext["bro
       cachedAccount = null;
       cachedPositions = null;
 
-      deps.onSell?.(symbol, reason);
+      deps.onSell?.(symbol, reason, pnl);
       return true;
     } catch (error) {
       log("PolicyBroker", "sell_failed", { symbol, error: String(error) });

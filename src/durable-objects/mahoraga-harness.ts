@@ -67,7 +67,6 @@ export class MahoragaHarness extends DurableObject<Env> {
   private sleeveReserved = 0;
   private screening = createHalalScreening(this.env);
   private _etDayFormatter: Intl.DateTimeFormat | null = null;
-  private discordCooldowns: Map<string, number> = new Map();
   private readonly DISCORD_COOLDOWN_MS = 30 * 60 * 1000;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -184,10 +183,12 @@ export class MahoragaHarness extends DurableObject<Env> {
         },
         getReserved: () => self.sleeveReserved,
       },
-      onBuy: (_symbol, notional) => {
+      onBuy: (symbol, notional, reason) => {
         self.sleeveReserved = roundCents(self.sleeveReserved + notional);
+        self.ctx.waitUntil(self.notifyTrade("buy", symbol, { notional, reason }));
       },
-      onSell: (symbol) => {
+      onSell: (symbol, reason, pnl) => {
+        self.ctx.waitUntil(self.notifyTrade("sell", symbol, { reason, pnl }));
         delete self.state.positionEntries[symbol];
         delete self.state.socialHistory[symbol];
         delete self.state.stalenessAnalysis[symbol];
@@ -1489,6 +1490,47 @@ export class MahoragaHarness extends DurableObject<Env> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  /** Tells Discord about an order the agent actually placed. Every trade is sent; there is no cooldown. */
+  private async notifyTrade(
+    side: "buy" | "sell",
+    symbol: string,
+    details: { notional?: number; reason: string; pnl?: number | null }
+  ): Promise<void> {
+    if (!this.env.DISCORD_WEBHOOK_URL) return;
+    const fields: Array<{ name: string; value: string; inline: boolean }> = [];
+    if (details.notional != null) {
+      fields.push({ name: "Amount", value: `$${details.notional.toFixed(2)}`, inline: true });
+    }
+    if (details.pnl != null) {
+      const sign = details.pnl >= 0 ? "+" : "-";
+      fields.push({ name: "Profit or loss", value: `${sign}$${Math.abs(details.pnl).toFixed(2)}`, inline: true });
+    }
+    fields.push({ name: "Account", value: this.env.ALPACA_PAPER === "true" ? "Paper" : "Live", inline: true });
+    const lost = details.pnl != null && details.pnl < 0;
+    try {
+      const response = await fetch(this.env.DISCORD_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          embeds: [
+            {
+              title: `${side === "buy" ? "Bought" : "Sold"} $${symbol}`,
+              color: side === "buy" ? 0x22c55e : lost ? 0xef4444 : 0x3b82f6,
+              description: details.reason.slice(0, 500),
+              fields,
+              timestamp: new Date().toISOString(),
+              footer: { text: "MAHORAGA • Not financial advice" },
+            },
+          ],
+        }),
+      });
+      if (!response.ok) throw new Error(`Discord returned HTTP ${response.status}`);
+      this.log("Discord", "trade_notification_sent", { side, symbol });
+    } catch (error) {
+      this.log("Discord", "notification_failed", { side, symbol, error: String(error) });
+    }
+  }
+
   private async sendDiscordNotification(
     type: "signal" | "research",
     data: {
@@ -1505,8 +1547,11 @@ export class MahoragaHarness extends DurableObject<Env> {
   ): Promise<void> {
     if (!this.env.DISCORD_WEBHOOK_URL) return;
 
+    // Kept in stored state: the object is rebuilt between alarms, so an in-memory cooldown would not hold.
+    this.state.discordCooldowns ??= {};
+    const cooldowns = this.state.discordCooldowns;
     const cacheKey = data.symbol;
-    const lastNotification = this.discordCooldowns.get(cacheKey);
+    const lastNotification = cooldowns[cacheKey];
     if (lastNotification && Date.now() - lastNotification < this.DISCORD_COOLDOWN_MS) return;
 
     try {
@@ -1568,7 +1613,7 @@ export class MahoragaHarness extends DurableObject<Env> {
         body: JSON.stringify({ embeds: [embed] }),
       });
 
-      this.discordCooldowns.set(cacheKey, Date.now());
+      cooldowns[cacheKey] = Date.now();
       this.log("Discord", "notification_sent", { type, symbol: data.symbol });
     } catch (err) {
       this.log("Discord", "notification_failed", { error: String(err) });

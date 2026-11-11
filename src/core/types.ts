@@ -151,6 +151,8 @@ export interface AgentState {
   lastHalalReviewRun: number;
   /** When the analyst model last ran. Persisted, because the object is rebuilt between alarms. */
   lastAnalystModelCall: number;
+  /** When a research alert was last sent to Discord for each symbol. */
+  discordCooldowns?: Record<string, number>;
   positionResearch: Record<string, unknown>;
   stalenessAnalysis: Record<string, unknown>;
   twitterConfirmations: Record<string, TwitterConfirmation>;

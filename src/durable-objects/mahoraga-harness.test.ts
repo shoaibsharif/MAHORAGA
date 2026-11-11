@@ -99,6 +99,49 @@ beforeEach(() => {
   }));
 });
 
+describe("trade alerts", () => {
+  type Notifier = {
+    notifyTrade(
+      side: "buy" | "sell",
+      symbol: string,
+      details: { notional?: number; reason: string; pnl?: number | null }
+    ): Promise<void>;
+  };
+
+  it("sends every executed buy and sell to Discord with the amount, result and account type", async () => {
+    const { harness } = setup();
+    const post = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", post);
+    Object.assign(harness, { env: { DISCORD_WEBHOOK_URL: "https://discord.test/hook", ALPACA_PAPER: "true" } });
+    const notifier = harness as unknown as Notifier;
+
+    await notifier.notifyTrade("buy", "TEST", { notional: 7.18, reason: "Research BUY" });
+    await notifier.notifyTrade("sell", "TEST", { reason: "Stop loss", pnl: -1.5 });
+
+    expect(post).toHaveBeenCalledTimes(2);
+    const [bought, sold] = post.mock.calls.map((call) => JSON.parse(call[1].body).embeds[0]);
+    expect(bought.title).toBe("Bought $TEST");
+    expect(bought.fields).toEqual([
+      { name: "Amount", value: "$7.18", inline: true },
+      { name: "Account", value: "Paper", inline: true },
+    ]);
+    expect(sold.title).toBe("Sold $TEST");
+    expect(sold.fields[0]).toEqual({ name: "Profit or loss", value: "-$1.50", inline: true });
+  });
+
+  it("stays silent without a webhook and survives a Discord failure", async () => {
+    const { harness } = setup();
+    const post = vi.fn().mockResolvedValue(new Response(null, { status: 500 }));
+    vi.stubGlobal("fetch", post);
+    const notifier = harness as unknown as Notifier;
+    await notifier.notifyTrade("buy", "TEST", { notional: 5, reason: "Research BUY" });
+    expect(post).not.toHaveBeenCalled();
+
+    Object.assign(harness, { env: { DISCORD_WEBHOOK_URL: "https://discord.test/hook" } });
+    await expect(notifier.notifyTrade("buy", "TEST", { notional: 5, reason: "Research BUY" })).resolves.toBeUndefined();
+  });
+});
+
 describe("dynamic screened research", () => {
   it("continues past rejected symbols and researches the next eligible stock", async () => {
     const { harness, state, complete, screen, ctx } = setup();
