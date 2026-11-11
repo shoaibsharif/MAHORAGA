@@ -37,13 +37,15 @@ npm 12 blocks dependency install scripts unless `allowScripts` in `package.json`
 
 There is no fixed company list, fund allocation, or SPUS membership requirement. The existing gatherers discover candidates, and the agent screens candidates before spending LLM tokens on research. It scans up to 20 candidate symbols per research cycle to find eligible opportunities, then sizes purchases from the trading sleeve. Holding cash is valid when no candidates qualify.
 
-Screening uses the public [HalalScreener badge API](https://halalscreener.app/en/widget), which currently requires no API key and documents a 60-request/minute limit. Its dated AAOIFI Standard 21 verdict is an external provider assessment, not a religious certification or a claim that all screening authorities agree. The app requires a matching symbol, an individual-stock asset type, and a compliant verdict. Missing dates, provider errors, questionable results, inconsistent published ratios, funds, crypto and derivatives block purchases. A provider assessment expires after eight days; fetched evidence is refreshed at least hourly. Repeated unknown/error results are briefly cached to limit retry traffic. A changed provider response or format fails closed.
+Screening uses the public [HalalScreener badge API](https://halalscreener.app/en/widget), which currently requires no API key and documents a 60-request/minute limit. Its dated AAOIFI Standard 21 verdict is an external provider assessment, not a religious certification or a claim that all screening authorities agree. The app requires a matching symbol, an individual-stock asset type, and a compliant verdict. Missing dates, provider errors, questionable results, inconsistent published ratios, funds, crypto and derivatives block purchases. A provider assessment expires after eight days; fetched evidence is refreshed at least hourly. Non-compliant and uncovered results are kept for six hours, and transient errors for two minutes, to limit retry traffic. A changed provider response or format fails closed.
+
+Setting `HALAL_SH_API_KEY` switches screening to [halal.sh](https://docs.halal.sh), which also applies AAOIFI Standard 21 and adds a purification rate and a data-confidence score. halal.sh recomputes a verdict when a company files, so its assessments are accepted for up to 100 days; a compliant verdict with confidence below 0.7 is treated as questionable and blocks purchases. Results and SEC financial context are stored in D1, with a history row each time a symbol's verdict changes.
 
 The policy engine checks screening evidence immediately before autonomous purchases. MCP order previews include the evidence, and submission rechecks screening and current risk limits, so an old approval token cannot bypass a failed screen. Selling an owned position does not require a passing screen. Legacy options and crypto settings are disabled on hydration and cannot be enabled through agent configuration. Existing holdings are reviewed hourly and status changes are logged; a screening failure does not trigger an automatic liquidation or invent a disposal deadline.
 
 Research includes the screening ratios available from the free response and [SEC company financial facts and filing metadata](https://www.sec.gov/search-filings/edgar-application-programming-interfaces). Set `SEC_USER_AGENT` to identify your application and contact email. Financial figures keep their original periods, concept names and filing dates. Unsupported taxonomies or inaccessible filings remain explicitly unavailable; linked filing contents are not represented as having been reviewed. The free screening feed does not provide a purification rate, so the dashboard displays it as unavailable rather than assuming zero.
 
-The **Halal Screening** dashboard panel shows evidence, dates, rejection reasons, available ratios and source links. The MCP `halal-screen` tool returns the same evidence for any supplied stock symbol. No screening subscription or database migration is required. Brokerage and LLM credentials are still required for their respective services.
+The **Halal Screening** dashboard panel shows evidence, dates, rejection reasons, available ratios and source links. The MCP `halal-screen` tool returns the same evidence for any supplied stock symbol. No screening subscription is required. Brokerage and LLM credentials are still required for their respective services.
 
 ## Quick Start
 
@@ -120,6 +122,7 @@ npx wrangler secret put OPENAI_API_KEY       # openai-raw, or ai-sdk with OpenAI
 
 # Optional
 npx wrangler secret put SEC_USER_AGENT       # "AppName you@example.com" for SEC requests
+npx wrangler secret put HALAL_SH_API_KEY     # screen with halal.sh instead of the free HalalScreener badge
 npx wrangler secret put TWITTER_BEARER_TOKEN
 npx wrangler secret put DISCORD_WEBHOOK_URL
 ```

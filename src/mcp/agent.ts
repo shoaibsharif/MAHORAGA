@@ -9,7 +9,7 @@ import { PolicyEngine } from "../policy/engine";
 import { createAlpacaProviders } from "../providers/alpaca";
 import { getDTE } from "../providers/alpaca/options";
 import { getFundamentalContext } from "../providers/fundamentals";
-import { HalalScreeningService } from "../providers/halal";
+import { createHalalScreening, type HalalScreening } from "../providers/halal";
 import { classifyEvent, generateResearchReport, summarizeLearnedRules } from "../providers/llm/classifier";
 import { createLLMProvider } from "../providers/llm/factory";
 import { extractFinancialData, isAllowedDomain, scrapeUrl } from "../providers/scraper";
@@ -59,10 +59,10 @@ export class MahoragaMcp {
 
   private llm: LLMProvider | null = null;
   private options: OptionsProvider | null = null;
-  private screening: HalalScreeningService | null = null;
+  private screening: HalalScreening | null = null;
 
-  private getScreening(): HalalScreeningService {
-    return (this.screening ??= new HalalScreeningService(this.env.CACHE));
+  private getScreening(): HalalScreening {
+    return (this.screening ??= createHalalScreening(this.env));
   }
 
   async init() {

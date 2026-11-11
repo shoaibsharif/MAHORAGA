@@ -24,7 +24,7 @@ import type { Env } from "../env.d";
 import { getDefaultPolicyConfig } from "../policy/config";
 import { createAlpacaProviders } from "../providers/alpaca";
 import { getFundamentalContext } from "../providers/fundamentals";
-import { currentHalalReport, type HalalReport, HalalScreeningService, halalBlockReason } from "../providers/halal";
+import { createHalalScreening, currentHalalReport, type HalalReport, halalBlockReason } from "../providers/halal";
 import { createLLMProvider } from "../providers/llm/factory";
 import {
   computeValuation,
@@ -60,7 +60,7 @@ export class MahoragaHarness extends DurableObject<Env> {
   private lastAnalystModelCall = 0;
   private _llm: LLMProvider | null = null;
   private sleeveReserved = 0;
-  private screening = new HalalScreeningService(this.env.CACHE);
+  private screening = createHalalScreening(this.env);
   private _etDayFormatter: Intl.DateTimeFormat | null = null;
   private discordCooldowns: Map<string, number> = new Map();
   private readonly DISCORD_COOLDOWN_MS = 30 * 60 * 1000;

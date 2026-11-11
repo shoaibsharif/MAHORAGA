@@ -1,4 +1,5 @@
 import type { Env } from "../env.d";
+import { getStoredFundamentals, storeFundamentals } from "../storage/d1/queries/screening";
 
 interface Fact {
   val: number;
@@ -110,7 +111,7 @@ export function latestShareCount(facts: Fact[] = []): FundamentalContext["shares
 }
 
 export async function getFundamentalContext(
-  env: Pick<Env, "CACHE" | "SEC_USER_AGENT">,
+  env: Pick<Env, "CACHE" | "DB" | "SEC_USER_AGENT">,
   symbol: string
 ): Promise<FundamentalContext> {
   const result: FundamentalContext = {
@@ -136,9 +137,9 @@ export async function getFundamentalContext(
     return response.json();
   }
   try {
-    const key = `fundamentals:sec:v2:${symbol}`;
-    const cached = await env.CACHE.get<FundamentalContext>(key, "json").catch(() => null);
-    if (cached?.symbol === symbol && Date.now() - Date.parse(cached.checkedAt) < 3_600_000) return cached;
+    const cached = await getStoredFundamentals(env.DB, symbol).catch(() => null);
+    // SEC figures change when a company files, so a day-old copy is current enough.
+    if (cached?.symbol === symbol && Date.now() - Date.parse(cached.checkedAt) < 86_400_000) return cached;
     let tickers = await env.CACHE.get<Record<string, { cik_str: number; ticker: string; title: string }>>(
       "fundamentals:sec:tickers",
       "json"
@@ -207,7 +208,7 @@ export async function getFundamentalContext(
       "Figures retain their reported periods; quarterly, year-to-date and annual figures must not be compared as equivalent. Filing links are metadata, not reviewed filing contents."
     );
     if (!Object.keys(result.metrics).length) result.limitations.push("No supported USD US-GAAP financial facts found");
-    await env.CACHE.put(key, JSON.stringify(result), { expirationTtl: 3_600 }).catch(() => {});
+    await storeFundamentals(env.DB, result).catch(() => {});
   } catch (error) {
     result.limitations.push(error instanceof Error ? error.message : "Financial data unavailable");
   }

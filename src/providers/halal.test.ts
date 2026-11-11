@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   HALAL_CACHE_MS,
   HALAL_REPORT_MAX_AGE_MS,
+  HALAL_SH_PROVIDER,
   HalalScreeningService,
   halalBlockReason,
   unknownHalalReport,
@@ -83,7 +84,7 @@ describe("live halal evidence", () => {
   it("reuses dated cache evidence but refreshes expired evidence", async () => {
     const { service } = provider(badge());
     const fresh = await service.screen("TEST");
-    const cache = { get: vi.fn().mockResolvedValue(fresh), put: vi.fn() } as unknown as KVNamespace;
+    const cache = { get: vi.fn().mockResolvedValue(fresh), put: vi.fn() };
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(badge({ status: "haram" }))));
     const cached = new HalalScreeningService(cache, fetcher);
     expect((await cached.screen("TEST")).status).toBe("compliant");
@@ -103,5 +104,94 @@ describe("live halal evidence", () => {
       halalBlockReason({ ...report, checkedAt: new Date(Date.now() - HALAL_CACHE_MS).toISOString() }, "TEST")
     ).not.toBeNull();
     expect(halalBlockReason(unknownHalalReport("TEST", "Missing evidence"), "TEST")).toBe("Missing evidence");
+  });
+
+  it("keeps a failed lookup for an uncovered symbol far longer than a transient error", async () => {
+    const missing = await provider({}, 404).service.screen("TEST");
+    const outage = await provider({}, 503).service.screen("TEST");
+    expect(missing.status).toBe("unknown");
+    expect(Date.parse(missing.expiresAt) - Date.now()).toBeGreaterThan(3_600_000);
+    expect(Date.parse(outage.expiresAt) - Date.now()).toBeLessThan(300_000);
+  });
+
+  it("ignores a stored report from a different provider", async () => {
+    const { service } = provider(badge());
+    const stored = { ...(await service.screen("TEST")), provider: HALAL_SH_PROVIDER };
+    const store = { get: vi.fn().mockResolvedValue(stored), put: vi.fn() };
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(badge({ status: "haram" }))));
+    expect((await new HalalScreeningService(store, fetcher).screen("TEST")).status).toBe("non_compliant");
+    expect(store.put).toHaveBeenCalledTimes(1);
+  });
+});
+
+function halalSh(overrides: Record<string, unknown> = {}, determination: Record<string, unknown> = {}) {
+  return {
+    data: {
+      symbol: "TEST",
+      instrument_id: "TEST",
+      name: "Test Company",
+      methodology: "aaoifi-ss21@2026.1",
+      as_of: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+      determination: { status: "compliant", confidence: 0.95, explanation: null, withheld: null, ...determination },
+      screens: {
+        business_activity: { result: "pass" },
+        debt_to_market_cap: { result: "pass", value: 0.08, threshold: 0.3 },
+        cash_to_market_cap: { result: "pass", value: 0.05, threshold: 0.3 },
+        prohibited_revenue: { result: "pass", value: 0.012, threshold: 0.05 },
+      },
+      purification: { required: true, percentage: 1.2, amount_per_1000: 12 },
+      stability: { rating: "watch", drivers: [] },
+      ...overrides,
+    },
+    meta: { request_id: "req_test" },
+  };
+}
+
+function halalShProvider(body: unknown, status = 200) {
+  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(body), { status }));
+  return { service: new HalalScreeningService(undefined, fetcher, "hsh_test_key"), fetcher };
+}
+
+describe("halal.sh evidence", () => {
+  it("accepts a month-old compliant determination with its ratios and purification rate", async () => {
+    const { service, fetcher } = halalShProvider(halalSh());
+    const report = await service.screen("test");
+    expect(halalBlockReason(report, "TEST")).toBeNull();
+    expect(report).toMatchObject({
+      provider: HALAL_SH_PROVIDER,
+      status: "compliant",
+      assetType: "stock",
+      metrics: { debtRatio: 0.08, cashRatio: 0.05, prohibitedRevenueRatio: 0.012 },
+      purificationRatio: 0.012,
+      confidence: 0.95,
+    });
+    expect(report.reasons[0]).toContain("stability rated watch");
+    expect(fetcher.mock.calls[0]?.[0]).toBe("https://api.halal.sh/v1/instruments/TEST/compliance");
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({ "X-API-Key": "hsh_test_key" });
+  });
+
+  it.each([
+    ["non-compliant verdict", halalSh({}, { status: "non-compliant" })],
+    ["low-confidence verdict", halalSh({}, { confidence: 0.6 })],
+    [
+      "pending analysis",
+      halalSh({ as_of: null, screens: null }, { status: "pending", withheld: { reason: "no_data_source" } }),
+    ],
+    ["unrecognized future status", halalSh({}, { status: "under-review" })],
+    ["fund methodology", halalSh({ methodology: "aaoifi-ss57@2026.1" })],
+    ["different issuer", halalSh({ symbol: "OTHER" })],
+    ["undated determination", halalSh({ as_of: null })],
+    ["determination older than a quarter", halalSh({ as_of: new Date(Date.now() - 101 * 86_400_000).toISOString() })],
+    ["ratio contradicting the verdict", halalSh({ screens: { debt_to_market_cap: { result: "pass", value: 0.5 } } })],
+  ])("blocks a %s", async (_name, body) => {
+    const { service } = halalShProvider(body);
+    expect(halalBlockReason(await service.screen("TEST"), "TEST")).not.toBeNull();
+  });
+
+  it("does not treat a rejected key or rate limit as approval", async () => {
+    for (const status of [401, 403, 429]) {
+      const { service } = halalShProvider({ error: { code: "x", message: "y" } }, status);
+      expect((await service.screen("TEST")).status).toBe("unknown");
+    }
   });
 });

@@ -24,6 +24,8 @@ export interface Env {
   TWITTER_BEARER_TOKEN?: string;
   DISCORD_WEBHOOK_URL?: string;
   SEC_USER_AGENT?: string;
+  /** Switches halal screening from the free HalalScreener badge to halal.sh. */
+  HALAL_SH_API_KEY?: string;
   MAHORAGA_API_TOKEN: string;
   KILL_SWITCH_SECRET: string;
 
