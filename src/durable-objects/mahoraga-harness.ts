@@ -1277,6 +1277,9 @@ export class MahoragaHarness extends DurableObject<Env> {
         case "trigger":
           await this.alarm();
           return this.jsonResponse({ ok: true, message: "Alarm triggered" });
+        case "test-alert":
+          if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+          return this.jsonResponse(await this.sendTestAlert());
         case "kill":
           if (!this.isKillSwitchAuthorized(request)) {
             return new Response(
@@ -1488,6 +1491,32 @@ export class MahoragaHarness extends DurableObject<Env> {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** Posts a clearly labelled test message so the owner can confirm alerts reach their phone. */
+  private async sendTestAlert(): Promise<{ ok: boolean; configured: boolean; discordStatus?: number; error?: string }> {
+    if (!this.env.DISCORD_WEBHOOK_URL) return { ok: false, configured: false };
+    try {
+      const response = await fetch(this.env.DISCORD_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          embeds: [
+            {
+              title: "Test alert from MAHORAGA",
+              color: 0x3b82f6,
+              description: "Alerts are connected. No trade was placed. Real buys and sells will appear here.",
+              timestamp: new Date().toISOString(),
+              footer: { text: "MAHORAGA • Test message" },
+            },
+          ],
+        }),
+      });
+      this.log("Discord", "test_alert", { status: response.status });
+      return { ok: response.ok, configured: true, discordStatus: response.status };
+    } catch (error) {
+      return { ok: false, configured: true, error: String(error) };
+    }
   }
 
   /** Tells Discord about an order the agent actually placed. Every trade is sent; there is no cooldown. */

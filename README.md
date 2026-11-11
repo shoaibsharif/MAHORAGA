@@ -307,6 +307,7 @@ npx wrangler secret put ANTHROPIC_API_KEY # Your Anthropic API key
 | `/agent/config` | Get or update configuration |
 | `/agent/logs` | Get recent logs |
 | `/agent/trigger` | Manually trigger (for testing) |
+| `/agent/test-alert` | POST: send a test message to the Discord webhook |
 | `/agent/kill` | Emergency kill switch (uses `KILL_SWITCH_SECRET`) |
 | `/mcp` | MCP server for tool access |
 
