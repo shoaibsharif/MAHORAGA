@@ -56,7 +56,6 @@ function setup() {
   };
   const harness = Object.assign(Object.create(MahoragaHarness.prototype), {
     state,
-    lastAnalystModelCall: 0,
     _llm: { complete },
     screening: { screen },
     env: {} as Env,
@@ -198,8 +197,11 @@ describe("dynamic screened research", () => {
       callAnalystLLM(ctx: StrategyContext, signals: Signal[], positions: unknown[], account: unknown): Promise<unknown>;
     };
     await analyst.callAnalystLLM(ctx, state.signalCache, [], { cash: 100, equity: 100 });
+    // Research refreshed a minute later is still the same candidate.
+    state.signalResearch.DYNAMIC.timestamp = Date.now() + 60_000;
     await analyst.callAnalystLLM(ctx, state.signalCache, [], { cash: 100, equity: 100 });
     expect(complete).toHaveBeenCalledTimes(1);
+    expect(state.lastAnalystModelCall).toBeGreaterThan(0);
   });
 
   it("filters extra analyst BUY recommendations without preventing SELL recommendations", async () => {

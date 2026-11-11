@@ -150,6 +150,8 @@ export interface AgentState {
   halalReports: Record<string, import("../providers/halal").HalalReport>;
   fundamentalResearch: Record<string, import("../providers/fundamentals").FundamentalContext>;
   lastHalalReviewRun: number;
+  /** When the analyst model last ran. Persisted, because the object is rebuilt between alarms. */
+  lastAnalystModelCall: number;
   positionResearch: Record<string, unknown>;
   stalenessAnalysis: Record<string, unknown>;
   twitterConfirmations: Record<string, TwitterConfirmation>;
