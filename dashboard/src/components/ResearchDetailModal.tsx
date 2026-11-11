@@ -91,7 +91,7 @@ export function ResearchDetailModal({ symbol, research, onClose }: ResearchDetai
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="hud-panel relative w-full sm:max-w-2xl max-h-[92dvh] flex flex-col"
+        className="hud-panel relative w-full sm:max-w-2xl max-h-[92dvh] flex flex-col pb-[env(safe-area-inset-bottom)]"
       >
         <header className="flex items-start justify-between gap-4 px-5 py-4 border-b border-hud-line shrink-0">
           <div className="min-w-0">

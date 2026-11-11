@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, type ReactNode, type RefObject } from 'react'
+import { useState, useRef, useCallback, useEffect, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'motion/react'
 
@@ -19,6 +19,9 @@ interface UseTooltipReturn<T extends HTMLElement> {
   triggerProps: {
     onMouseEnter: () => void
     onMouseLeave: () => void
+    onFocus: () => void
+    onBlur: () => void
+    onClick: () => void
   }
   tooltipProps: {
     isVisible: boolean
@@ -33,6 +36,7 @@ export function useTooltip<T extends HTMLElement = HTMLElement>(
   const { position = 'top', delay = 200 } = options
   const [isVisible, setIsVisible] = useState(false)
   const [coords, setCoords] = useState<TooltipCoords>({ top: 0, left: 0 })
+  const [placement, setPlacement] = useState<TooltipPosition>(position)
   const triggerRef = useRef<T>(null)
   const timeoutRef = useRef<number | null>(null)
 
@@ -43,11 +47,15 @@ export function useTooltip<T extends HTMLElement = HTMLElement>(
     const scrollY = window.scrollY
     const scrollX = window.scrollX
     const padding = 8
+    // On a narrow screen there is no room beside the trigger, so the tooltip goes below it.
+    const narrow = window.innerWidth < 640
+    const placed = narrow ? 'bottom' : position
+    setPlacement(placed)
 
     let top = 0
     let left = 0
 
-    switch (position) {
+    switch (placed) {
       case 'top':
         top = rect.top + scrollY - padding
         left = rect.left + scrollX + rect.width / 2
@@ -64,6 +72,12 @@ export function useTooltip<T extends HTMLElement = HTMLElement>(
         top = rect.top + scrollY + rect.height / 2
         left = rect.right + scrollX + padding
         break
+    }
+
+    if (placed === 'top' || placed === 'bottom') {
+      // Keep a centred tooltip (at most 20rem wide) inside the viewport.
+      const half = Math.min(160, window.innerWidth / 2 - padding)
+      left = Math.max(scrollX + padding + half, Math.min(left, scrollX + window.innerWidth - padding - half))
     }
 
     setCoords({ top, left })
@@ -84,16 +98,40 @@ export function useTooltip<T extends HTMLElement = HTMLElement>(
     setIsVisible(false)
   }, [])
 
+  const show = useCallback(() => {
+    calculatePosition()
+    setIsVisible(true)
+  }, [calculatePosition])
+
+
+  useEffect(() => {
+    if (!isVisible) return
+    const dismiss = (event: Event) => {
+      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !triggerRef.current?.contains(event.target as Node))
+        setIsVisible(false)
+    }
+    document.addEventListener('pointerdown', dismiss)
+    document.addEventListener('keydown', dismiss)
+    return () => {
+      document.removeEventListener('pointerdown', dismiss)
+      document.removeEventListener('keydown', dismiss)
+    }
+  }, [isVisible])
+
   return {
     triggerRef,
     triggerProps: {
       onMouseEnter: handleMouseEnter,
       onMouseLeave: handleMouseLeave,
+      onFocus: show,
+      onBlur: handleMouseLeave,
+      // Touch screens have no hover: a tap opens it, and a tap elsewhere closes it.
+      onClick: show,
     },
     tooltipProps: {
       isVisible,
       coords,
-      position,
+      position: placement,
     },
   }
 }
@@ -181,7 +219,9 @@ export function Tooltip({
       <div
         ref={triggerRef}
         {...triggerProps}
-        className={block ? "block" : "inline-block"}
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: the trigger must be focusable so keyboard and touch users can open the tooltip
+        tabIndex={0}
+        className={`${block ? "block" : "inline-block"} focus-visible:outline focus-visible:outline-1`}
       >
         {children}
       </div>

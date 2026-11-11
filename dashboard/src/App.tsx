@@ -147,6 +147,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [openResearch, setOpenResearch] = useState<string | null>(null);
   const closeResearch = useCallback(() => setOpenResearch(null), []);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [showSetup, setShowSetup] = useState(false);
   const [setupChecked, setSetupChecked] = useState(false);
   const [time, setTime] = useState(new Date());
@@ -176,6 +177,7 @@ export default function App() {
         const data = await res.json();
         if (data.ok) {
           setStatus(data.data);
+          setLastUpdated(new Date());
           setError(null);
         } else {
           setError(data.error || "Failed to fetch status");
@@ -330,7 +332,7 @@ export default function App() {
         <Panel title={isAuthError ? "AUTHENTICATION REQUIRED" : "CONNECTION ERROR"} className="max-w-md w-full">
           <div className="text-center py-8">
             <div className="text-hud-error text-2xl mb-4">{isAuthError ? "NO TOKEN" : "OFFLINE"}</div>
-            <p className="text-hud-text-dim text-sm mb-6">{error}</p>
+            <p className="text-hud-text-dim text-sm mb-6">{isAuthError ? error : "The agent can't be reached."}</p>
             {isAuthError ? (
               <div className="space-y-4">
                 <div className="text-left bg-hud-panel p-4 border border-hud-line">
@@ -352,12 +354,15 @@ export default function App() {
                 </p>
               </div>
             ) : (
-              <p className="text-hud-text-dim text-xs">
-                Enable the agent:{" "}
-                <code className="text-hud-primary">
-                  curl -H "Authorization: Bearer $TOKEN" localhost:8787/agent/enable
-                </code>
-              </p>
+              <div className="space-y-4">
+                <p className="text-hud-text-dim text-sm">
+                  Check your connection. No trading data is stored on this device, so nothing can be shown until the
+                  agent is reachable.
+                </p>
+                <button type="button" onClick={() => window.location.reload()} className="hud-button min-h-11">
+                  Try again
+                </button>
+              </div>
             )}
           </div>
         </Panel>
@@ -367,7 +372,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-hud-bg">
-      <div className="max-w-[1920px] mx-auto p-4">
+      <div className="max-w-[1920px] mx-auto pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
+        {error && status && (
+          <div
+            role="status"
+            className="mb-4 border border-hud-warning/60 bg-hud-warning/10 text-hud-warning px-4 py-3 text-sm"
+          >
+            Not live: the agent can't be reached. Showing data from{" "}
+            {lastUpdated ? lastUpdated.toLocaleTimeString() : "an earlier update"}; prices and positions may have
+            changed.
+          </div>
+        )}
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 pb-3 border-b border-hud-line">
           <div className="flex items-center gap-4 md:gap-6">
             <div className="flex items-baseline gap-2">
