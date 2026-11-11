@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractMetrics, extractTrend, latestShareCount } from "./fundamentals";
+import { extractMetrics, extractTrend, latestShareCount, resolveShareCount } from "./fundamentals";
 
 describe("SEC financial context", () => {
   it("preserves the period, filing date and source concept for financial facts", () => {
@@ -74,6 +74,53 @@ describe("SEC financial context", () => {
       ])
     ).toEqual({ value: 100, end: "2026-10-01", filed: "2026-10-30" });
     expect(latestShareCount([])).toBeNull();
+  });
+
+  describe("share count fallbacks", () => {
+    const recent = (daysAgo: number) => new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10);
+    const shares = (facts: Array<Record<string, unknown>>) => ({ units: { shares: facts } }) as never;
+
+    it("prefers the cover-page count when it is plausible", () => {
+      const count = resolveShareCount(
+        {
+          EntityCommonStockSharesOutstanding: shares([
+            { val: 5_000_000, end: recent(30), filed: recent(20), form: "10-Q" },
+          ]),
+        },
+        { CommonStockSharesOutstanding: shares([{ val: 4_000_000, end: recent(60), filed: recent(20), form: "10-Q" }]) }
+      );
+      expect(count).toMatchObject({ value: 5_000_000, source: "cover" });
+    });
+
+    it("uses the latest quarter's weighted average when no single total is published", () => {
+      const count = resolveShareCount(
+        {},
+        {
+          WeightedAverageNumberOfSharesOutstandingBasic: shares([
+            { val: 240_000_000, start: recent(300), end: recent(210), filed: recent(190), form: "10-Q" },
+            // A nine-month average ending on the same date must not win over the single quarter.
+            { val: 245_000_000, start: recent(300), end: recent(30), filed: recent(10), form: "10-Q" },
+            { val: 250_000_000, start: recent(120), end: recent(30), filed: recent(10), form: "10-Q" },
+          ]),
+        }
+      );
+      expect(count).toMatchObject({ value: 250_000_000, source: "average" });
+    });
+
+    it("rejects placeholder and long-outdated counts instead of pricing a company on them", () => {
+      const one = shares([{ val: 1, start: recent(120), end: recent(30), filed: recent(10), form: "10-Q" }]);
+      expect(
+        resolveShareCount({}, { CommonStockSharesOutstanding: one, WeightedAverageNumberOfSharesOutstandingBasic: one })
+      ).toBeNull();
+      expect(
+        resolveShareCount({
+          EntityCommonStockSharesOutstanding: shares([
+            { val: 5_000_000, end: recent(500), filed: recent(480), form: "10-K" },
+          ]),
+        })
+      ).toBeNull();
+      expect(resolveShareCount()).toBeNull();
+    });
   });
 
   it("builds quarterly and annual trends, deriving the unfiled fourth quarter", () => {

@@ -77,7 +77,10 @@ export function computeValuation(fundamentals: FundamentalContext, price: number
     priceToSales: revenue && revenue.value > 0 ? round(marketCap / revenue.value) : null,
     priceToEarnings: netIncome && netIncome.value > 0 ? round(marketCap / netIncome.value) : null,
     annualNetIncomeNegative: !!netIncome && netIncome.value < 0,
-    basis: `Shares outstanding ${shares.value} as of ${shares.end} times the current price; revenue and earnings from the fiscal year ending ${period ?? "unavailable"}. Companies with several share classes may be undercounted.`,
+    basis:
+      shares.source === "average"
+        ? `Approximate: the exact share count is not published as one figure, so this uses the weighted-average ${shares.value} shares for the quarter ending ${shares.end} times the current price; revenue and earnings from the fiscal year ending ${period ?? "unavailable"}. Treat the multiples as rough.`
+        : `Shares outstanding ${shares.value} as of ${shares.end} times the current price; revenue and earnings from the fiscal year ending ${period ?? "unavailable"}.`,
   };
 }
 

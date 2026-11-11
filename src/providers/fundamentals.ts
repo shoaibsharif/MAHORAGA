@@ -18,7 +18,11 @@ export interface FinancialMetric {
   filed: string;
 }
 
+/** Bumped whenever the extracted fields change, so stored copies in the old shape are fetched again. */
+const CONTEXT_VERSION = 3;
+
 export interface FundamentalContext {
+  version?: number;
   symbol: string;
   company: string | null;
   checkedAt: string;
@@ -26,7 +30,16 @@ export interface FundamentalContext {
   metrics: Record<string, FinancialMetric>;
   /** Full fiscal-year figures from the latest annual report, for valuation multiples. */
   annual?: Record<string, FinancialMetric>;
-  sharesOutstanding?: { value: number; end: string; filed: string } | null;
+  sharesOutstanding?: {
+    value: number;
+    end: string;
+    filed: string;
+    /**
+     * Where the count came from. `average` is the quarter's weighted-average share count, an
+     * approximation used when a company reports its exact count only per share class.
+     */
+    source?: "cover" | "balance_sheet" | "average";
+  } | null;
   /** Recent quarters and fiscal years, oldest first, so growth and margins can be judged. */
   trend?: FinancialTrend | null;
   filings: Array<{ form: string; filed: string; url: string }>;
@@ -205,11 +218,52 @@ export function latestShareCount(facts: Fact[] = []): FundamentalContext["shares
   return { value: fromLatestFiling.reduce((sum, fact) => sum + fact.val, 0), end, filed: latestFiling };
 }
 
+type ShareFacts = Record<string, { units?: { shares?: Fact[] } }>;
+/** A real listed company has far more shares than this; shells and placeholder filings report 1. */
+const MIN_PLAUSIBLE_SHARES = 100_000;
+const MAX_SHARE_COUNT_AGE_MS = 400 * DAY_MS;
+
+/**
+ * The best available share count. SEC's data omits figures that are broken down by share
+ * class, so a company with several classes has no cover-page or balance-sheet total; its
+ * weighted-average count for the latest quarter is then the closest published figure.
+ */
+export function resolveShareCount(
+  dei: ShareFacts = {},
+  gaap: ShareFacts = {}
+): FundamentalContext["sharesOutstanding"] {
+  const usable = (count: FundamentalContext["sharesOutstanding"]) =>
+    !!count && count.value >= MIN_PLAUSIBLE_SHARES && Date.now() - Date.parse(count.end) <= MAX_SHARE_COUNT_AGE_MS;
+
+  const cover = latestShareCount(dei.EntityCommonStockSharesOutstanding?.units?.shares);
+  if (cover && usable(cover)) return { ...cover, source: "cover" };
+
+  const balanceSheet = latestShareCount(gaap.CommonStockSharesOutstanding?.units?.shares);
+  if (balanceSheet && usable(balanceSheet)) return { ...balanceSheet, source: "balance_sheet" };
+
+  // Prefer a single quarter: year-to-date averages lag the current count further.
+  const averages = (gaap.WeightedAverageNumberOfSharesOutstandingBasic?.units?.shares ?? []).filter(
+    (fact) => Number.isFinite(fact.val) && !!fact.start && Date.parse(fact.end) <= Date.now()
+  );
+  const quarterly = averages.filter((fact) => {
+    const days = (Date.parse(fact.end) - Date.parse(fact.start ?? fact.end)) / DAY_MS;
+    return days >= 80 && days <= 100;
+  });
+  const latest = (quarterly.length ? quarterly : averages)
+    .sort((a, b) => a.end.localeCompare(b.end) || a.filed.localeCompare(b.filed))
+    .at(-1);
+  const average = latest
+    ? { value: latest.val, end: latest.end, filed: latest.filed, source: "average" as const }
+    : null;
+  return average && usable(average) ? average : null;
+}
+
 export async function getFundamentalContext(
   env: Pick<Env, "CACHE" | "DB" | "SEC_USER_AGENT">,
   symbol: string
 ): Promise<FundamentalContext> {
   const result: FundamentalContext = {
+    version: CONTEXT_VERSION,
     symbol,
     company: null,
     checkedAt: new Date().toISOString(),
@@ -234,9 +288,8 @@ export async function getFundamentalContext(
   try {
     const cached = await getStoredFundamentals(env.DB, symbol).catch(() => null);
     // SEC figures change when a company files, so a day-old copy is current enough.
-    // A copy stored before trends were added has no `trend` key and is fetched again.
-    if (cached?.symbol === symbol && "trend" in cached && Date.now() - Date.parse(cached.checkedAt) < 86_400_000)
-      return cached;
+    const current = cached?.symbol === symbol && cached.version === CONTEXT_VERSION;
+    if (cached && current && Date.now() - Date.parse(cached.checkedAt) < 86_400_000) return cached;
     let tickers = await env.CACHE.get<Record<string, { cik_str: number; ticker: string; title: string }>>(
       "fundamentals:sec:tickers",
       "json"
@@ -261,8 +314,8 @@ export async function getFundamentalContext(
       const data = facts.value as {
         cik?: number | string;
         facts?: {
-          "us-gaap"?: Parameters<typeof extractMetrics>[0];
-          dei?: Record<string, { units?: { shares?: Fact[] } }>;
+          "us-gaap"?: Parameters<typeof extractMetrics>[0] & ShareFacts;
+          dei?: ShareFacts;
         };
       };
       // SEC sends the CIK as a number for some issuers and a zero-padded string for others.
@@ -270,7 +323,7 @@ export async function getFundamentalContext(
       result.metrics = extractMetrics(data.facts?.["us-gaap"] ?? {});
       result.annual = extractMetrics(data.facts?.["us-gaap"] ?? {}, true);
       result.trend = extractTrend(data.facts?.["us-gaap"] ?? {});
-      result.sharesOutstanding = latestShareCount(data.facts?.dei?.EntityCommonStockSharesOutstanding?.units?.shares);
+      result.sharesOutstanding = resolveShareCount(data.facts?.dei, data.facts?.["us-gaap"]);
     } else result.limitations.push("SEC financial facts unavailable");
     if (submissions.status === "fulfilled") {
       const data = submissions.value as {

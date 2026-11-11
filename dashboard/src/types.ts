@@ -123,6 +123,7 @@ export interface SignalResearch {
     priceToSales: number | null;
     priceToEarnings: number | null;
     annualNetIncomeNegative: boolean;
+    basis?: string;
   } | null;
   fundamentals?: {
     trend?: {

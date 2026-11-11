@@ -155,6 +155,12 @@ export function ResearchDetailModal({ symbol, research, onClose }: ResearchDetai
           )}
 
           <Section title="Valuation">
+            {valuation?.basis?.startsWith("Approximate") && (
+              <p className="text-sm text-hud-warning mb-2">
+                Approximate: based on the quarter's average share count, because the exact count isn't published as
+                one figure.
+              </p>
+            )}
             {valuation ? (
               <Facts
                 items={[
