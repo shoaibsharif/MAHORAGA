@@ -40,10 +40,13 @@
   "durable_objects": {
     "bindings": [
       { "name": "SESSION", "class_name": "SessionDO" },
-      { "name": "MCP_AGENT", "class_name": "MahoragaMcpAgent" },
       { "name": "MAHORAGA_HARNESS", "class_name": "MahoragaHarness" }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionDO", "MahoragaMcpAgent", "MahoragaHarness"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["SessionDO", "MahoragaMcpAgent", "MahoragaHarness"] },
+    // The MCP server is stateless now; this drops the old per-session Durable Object and its storage.
+    { "tag": "v2", "deleted_classes": ["MahoragaMcpAgent"] }
+  ],
   "triggers": { "crons": ["*/5 13-20 * * 1-5", "0 14 * * 1-5", "30 21 * * 1-5", "0 5 * * *", "0 * * * *"] }
 }

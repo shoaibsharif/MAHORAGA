@@ -13,7 +13,6 @@ vi.mock("./durable-objects/session", () => ({
   incrementRequest: vi.fn(),
 }));
 vi.mock("./mcp/agent", () => ({ createMahoragaMcpServer: vi.fn() }));
-vi.mock("./durable-objects/retired-mcp-agent", () => ({ MahoragaMcpAgent: class {} }));
 vi.mock("agents/mcp/server", () => ({ createMcpHandler: vi.fn() }));
 vi.mock("./jobs/cron", () => ({ handleCronEvent: vi.fn() }));
 

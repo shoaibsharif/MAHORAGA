@@ -6,7 +6,6 @@ import { handleCronEvent } from "./jobs/cron";
 import { createMahoragaMcpServer } from "./mcp/agent";
 
 export { MahoragaHarness } from "./durable-objects/mahoraga-harness";
-export { MahoragaMcpAgent } from "./durable-objects/retired-mcp-agent";
 export { SessionDO } from "./durable-objects/session";
 
 function constantTimeCompare(a: string, b: string): boolean {
