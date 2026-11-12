@@ -228,6 +228,7 @@ export interface MarketDataProvider {
   getSnapshot(symbol: string): Promise<Snapshot>;
   getSnapshots(symbols: string[]): Promise<Record<string, Snapshot>>;
   getCryptoSnapshot(symbol: string): Promise<Snapshot>;
+  getNews(symbols: string[], params?: { start?: string; limit?: number }): Promise<NewsItem[]>;
 }
 
 export interface OptionsChain {

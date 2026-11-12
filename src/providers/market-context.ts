@@ -1,6 +1,6 @@
 import type { FundamentalContext } from "./fundamentals";
 import { computeTechnicals } from "./technicals";
-import type { Bar } from "./types";
+import type { Bar, NewsItem } from "./types";
 
 export interface PriceHistory {
   asOf: string;
@@ -84,10 +84,8 @@ export function computeValuation(fundamentals: FundamentalContext, price: number
   };
 }
 
-/** Whether a trade happened in the regular New York session (9:30 to 16:00 on a weekday). */
-export function tradingSession(timestamp: string): "regular" | "extended" | "unknown" {
-  const time = Date.parse(timestamp);
-  if (!Number.isFinite(time)) return "unknown";
+/** The New York weekday and the minutes past midnight there. */
+function newYorkClock(time: number): { weekday: string; minutes: number } {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-US", {
       timeZone: "America/New_York",
@@ -99,7 +97,37 @@ export function tradingSession(timestamp: string): "regular" | "extended" | "unk
       .formatToParts(new Date(time))
       .map((part) => [part.type, part.value])
   );
-  if (parts.weekday === "Sat" || parts.weekday === "Sun") return "extended";
-  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-  return minutes >= 570 && minutes < 960 ? "regular" : "extended";
+  return { weekday: parts.weekday ?? "", minutes: Number(parts.hour) * 60 + Number(parts.minute) };
+}
+
+const REGULAR_OPEN_MINUTES = 570;
+const REGULAR_CLOSE_MINUTES = 960;
+
+/** Whether a trade happened in the regular New York session (9:30 to 16:00 on a weekday). */
+export function tradingSession(timestamp: string): "regular" | "extended" | "unknown" {
+  const time = Date.parse(timestamp);
+  if (!Number.isFinite(time)) return "unknown";
+  const { weekday, minutes } = newYorkClock(time);
+  if (weekday === "Sat" || weekday === "Sun") return "extended";
+  return minutes >= REGULAR_OPEN_MINUTES && minutes < REGULAR_CLOSE_MINUTES ? "regular" : "extended";
+}
+
+/** Minutes since the 9:30 New York open on the same day; negative before it. */
+export function minutesSinceOpen(time = Date.now()): number {
+  return newYorkClock(time).minutes - REGULAR_OPEN_MINUTES;
+}
+
+/**
+ * Headlines as prompt lines, newest first. The text comes from third parties, so it is flattened to
+ * one short line each and the prompt tells the model to treat it as data.
+ */
+export function formatHeadlines(news: NewsItem[]): string {
+  if (news.length === 0) return "No headlines found for the last two days.";
+  return news
+    .map((item) => {
+      const at = item.created_at.slice(0, 16).replace("T", " ");
+      const headline = item.headline.replace(/\s+/g, " ").trim().slice(0, 200);
+      return `- ${at} UTC [${item.symbols.join(", ")}] ${headline}${item.source ? ` (${item.source})` : ""}`;
+    })
+    .join("\n");
 }

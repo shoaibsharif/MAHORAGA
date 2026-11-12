@@ -136,6 +136,8 @@ export interface BuyCandidate {
 export interface SellCandidate {
   symbol: string;
   reason: string;
+  /** Which rule asked for the sale. Core treats a stop-loss exit differently from a stale one. */
+  kind?: "take_profit" | "stop_loss" | "stale";
 }
 
 // ---------------------------------------------------------------------------

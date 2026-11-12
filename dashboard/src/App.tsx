@@ -481,6 +481,9 @@ export default function App() {
                         const priceHistory = positionPriceHistories[pos.symbol] || [];
                         const posEntry = status?.positionEntries?.[pos.symbol];
                         const staleness = status?.stalenessAnalysis?.[pos.symbol];
+                        // A review only matters while the holding is still past the stop loss.
+                        const review =
+                          config && plPct <= -config.stop_loss_pct ? status?.stopLossReviews?.[pos.symbol] : undefined;
                         const holdTime = posEntry ? Math.floor((Date.now() - posEntry.entry_time) / 3600000) : null;
 
                         return (
@@ -515,13 +518,23 @@ export default function App() {
                                         ? [
                                             {
                                               label: "Staleness",
-                                              value: `${(staleness.score * 100).toFixed(0)}%`,
-                                              color: staleness.shouldExit ? "text-hud-error" : "text-hud-text",
+                                              value: `${staleness.staleness_score.toFixed(0)} / 100`,
+                                              color: staleness.isStale ? "text-hud-error" : "text-hud-text",
+                                            },
+                                          ]
+                                        : []),
+                                      ...(review
+                                        ? [
+                                            {
+                                              label: "Stop-loss review",
+                                              value: review.decision === "HOLD" ? "Keep holding" : "Sell",
+                                              color:
+                                                review.decision === "HOLD" ? "text-hud-warning" : "text-hud-error",
                                             },
                                           ]
                                         : []),
                                     ]}
-                                    description={posEntry?.entry_reason}
+                                    description={review ? review.reasoning : posEntry?.entry_reason}
                                   />
                                 }
                               >
@@ -547,6 +560,9 @@ export default function App() {
                             >
                               <div>{formatCurrency(pos.unrealized_pl)}</div>
                               <div className="text-xs opacity-70">{formatPercent(plPct)}</div>
+                              {review?.decision === "HOLD" && (
+                                <div className="text-xs text-hud-warning whitespace-nowrap">Held on review</div>
+                              )}
                             </td>
                             <td className="py-2 px-2">
                               <div className="flex justify-center">
@@ -869,7 +885,10 @@ export default function App() {
                 />
                 <MetricInline label="MIN SENT" value={`${(config.min_sentiment_score * 100).toFixed(0)}%`} />
                 <MetricInline label="TAKE PROFIT" value={`${config.take_profit_pct}%`} />
-                <MetricInline label="STOP LOSS" value={`${config.stop_loss_pct}%`} />
+                <MetricInline
+                  label="STOP LOSS"
+                  value={`${config.stop_loss_pct}% REVIEW / ${config.hard_stop_loss_pct ?? 15}% SELL`}
+                />
                 <span className="hidden lg:inline text-hud-line">|</span>
                 <MetricInline
                   label="OPTIONS"

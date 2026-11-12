@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { safeValidateAgentConfig } from "../../schemas/agent-config";
 import { DEFAULT_CONFIG, getInitialAgentConfig } from "./config";
 
 describe("initial cloud agent configuration", () => {
@@ -15,5 +16,20 @@ describe("initial cloud agent configuration", () => {
 
   it("retains defaults when no deployment model is specified", () => {
     expect(getInitialAgentConfig({})).toEqual(DEFAULT_CONFIG);
+  });
+});
+
+describe("stop-loss settings", () => {
+  it("accepts the defaults and fills the newer settings in for a stored configuration that lacks them", () => {
+    expect(safeValidateAgentConfig(DEFAULT_CONFIG).success).toBe(true);
+    const { hard_stop_loss_pct: _hard, open_sell_delay_minutes: _delay, ...older } = DEFAULT_CONFIG;
+    const result = safeValidateAgentConfig(older);
+    expect(result.success && result.data.hard_stop_loss_pct).toBe(15);
+    expect(result.success && result.data.open_sell_delay_minutes).toBe(30);
+  });
+
+  it("rejects a hard stop that sits above the level where the review starts", () => {
+    const result = safeValidateAgentConfig({ ...DEFAULT_CONFIG, stop_loss_pct: 10, hard_stop_loss_pct: 8 });
+    expect(result.success).toBe(false);
   });
 });

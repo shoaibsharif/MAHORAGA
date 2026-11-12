@@ -78,7 +78,7 @@ TRADING RULES:
 - Fixed position dollar cap: ${ctx.config.max_position_value === null ? "None; percentage and cash limits still apply" : `$${ctx.config.max_position_value}`}
 - Minimum entry value: $${ctx.config.min_trade_notional}
 - Take profit target: ${ctx.config.take_profit_pct}%
-- Stop loss: ${ctx.config.stop_loss_pct}%
+- Stop loss: a position down ${ctx.config.stop_loss_pct}% or more gets its own review with the news before any sale, and is always sold at -${ctx.config.hard_stop_loss_pct}%. Do not recommend SELL because of the size of a loss alone
 - Min confidence to trade: ${ctx.config.min_analyst_confidence}
 - Min hold time before selling: ${ctx.config.llm_min_hold_minutes ?? 30} minutes
 - Shares bought today are never sold the same day; a SELL for them is held back until the next trading day
@@ -92,7 +92,7 @@ Rules:
 - Only recommend BUY for symbols with strong conviction from multiple data points
 - Recommend SELL only for positions that have been held long enough AND show deteriorating sentiment or major red flags
 - Give positions time to develop - avoid selling too early just because gains are small
-- Positions held less than 1-2 hours should generally be given more time unless hitting stop loss
+- Positions held less than 1-2 hours should generally be given more time
 - Consider the QUALITY of sentiment, not just quantity
 - Output valid JSON only
 

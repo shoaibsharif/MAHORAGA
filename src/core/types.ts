@@ -154,6 +154,10 @@ export interface AgentState {
   /** When a research alert was last sent to Discord for each symbol. */
   discordCooldowns?: Record<string, number>;
   positionResearch: Record<string, unknown>;
+  /** The latest stop-loss review for each held stock that has fallen past the stop loss. */
+  stopLossReviews: Record<string, import("./exit-policy").StopLossReview>;
+  /** When a stop-loss review first failed for a stock, so a brief outage does not force a sale. */
+  stopLossReviewFailedAt: Record<string, number>;
   stalenessAnalysis: Record<string, unknown>;
   twitterConfirmations: Record<string, TwitterConfirmation>;
   twitterDailyReads: number;

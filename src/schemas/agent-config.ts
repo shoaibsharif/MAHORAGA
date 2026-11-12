@@ -17,6 +17,10 @@ export const AgentConfigSchema = z
 
     take_profit_pct: z.number().min(1).max(100),
     stop_loss_pct: z.number().min(1).max(50),
+    /** At this loss a position is sold without a review. Between stop_loss_pct and this, the analyst model decides. */
+    hard_stop_loss_pct: z.number().min(1).max(90).default(15),
+    /** Sales wait this many minutes after the opening bell, unless the hard stop is hit. */
+    open_sell_delay_minutes: z.number().min(0).max(120).default(30),
     position_size_pct_of_cash: z.number().min(1).max(100),
 
     stale_position_enabled: z.boolean(),
@@ -64,6 +68,10 @@ export const AgentConfigSchema = z
   .refine((data) => data.max_position_value === null || data.min_trade_notional <= data.max_position_value, {
     message: "min_trade_notional must not exceed max_position_value",
     path: ["min_trade_notional"],
+  })
+  .refine((data) => data.hard_stop_loss_pct >= data.stop_loss_pct, {
+    message: "hard_stop_loss_pct must be at least stop_loss_pct",
+    path: ["hard_stop_loss_pct"],
   })
   .refine((data) => data.options_min_delta < data.options_max_delta, {
     message: "options_min_delta must be less than options_max_delta",

@@ -240,7 +240,9 @@ See `docs/harness.html` for the full customization guide.
 | `starting_equity` | 100 | Sleeve bankroll. Agent P&L compounds on top of this |
 | `position_size_pct_of_cash` | 10 | Cash percentage used to size entries before confidence adjustment |
 | `take_profit_pct` | 10 | Take profit percentage |
-| `stop_loss_pct` | 5 | Stop loss percentage (waits for the next trading day if the shares were bought today) |
+| `stop_loss_pct` | 5 | Loss at which the analyst model reviews the position with the news and decides to sell or hold |
+| `hard_stop_loss_pct` | 15 | Loss at which the position is always sold, without a review |
+| `open_sell_delay_minutes` | 30 | Minutes after the opening bell during which nothing is sold, unless the hard stop is hit |
 | `min_sentiment_score` | 0.3 | Minimum sentiment to consider |
 | `min_analyst_confidence` | 0.6 | Minimum LLM confidence to trade |
 | `options_enabled` | false | Enable options trading |
@@ -392,6 +394,8 @@ mahoraga/
 | Daily Loss Limit | Stops trading after 2% daily loss |
 | Staleness Detection | Auto-exit stale positions |
 | Settled Sales Only | Shares bought today are not sold until the next trading day, stop loss included |
+| Reviewed Stop Loss | A position past the stop loss is sold only after the analyst model has read the news; a hard stop always sells |
+| Opening Wait | No sales in the first 30 minutes of the session, when prices swing most |
 | No Margin | Cash-only trading |
 | No Shorting | Long positions only |
 

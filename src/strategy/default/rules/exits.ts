@@ -1,8 +1,8 @@
 /**
  * Exit rules — decide which positions to sell.
  *
- * Core ALWAYS enforces stop-loss/take-profit on top of strategy exits.
- * This function handles: TP, SL, staleness, and options exits.
+ * This function handles: TP, staleness, SL, and options exits.
+ * Core decides whether a candidate is sold now: see core/exit-policy.ts.
  */
 
 import type { Account, Position } from "../../../core/types";
@@ -31,20 +31,13 @@ export function selectExits(ctx: StrategyContext, positions: Position[], _accoun
       exits.push({
         symbol: pos.symbol,
         reason: `Take profit at +${plPct.toFixed(1)}%`,
+        kind: "take_profit",
       });
       continue;
     }
 
-    // Stop loss
-    if (plPct <= -ctx.config.stop_loss_pct) {
-      exits.push({
-        symbol: pos.symbol,
-        reason: `Stop loss at ${plPct.toFixed(1)}%`,
-      });
-      continue;
-    }
-
-    // Staleness check
+    // Staleness is judged before the stop loss: a stop-loss exit can be held back on review,
+    // and a position that has also run out of time should leave either way.
     if (ctx.config.stale_position_enabled) {
       // Get current social volume from strategy state
       const socialSnapshot = ctx.state.get<Record<string, { volume: number }>>("socialSnapshotCache") ?? {};
@@ -62,8 +55,19 @@ export function selectExits(ctx: StrategyContext, positions: Position[], _accoun
         exits.push({
           symbol: pos.symbol,
           reason: `STALE: ${stalenessResult.reason}`,
+          kind: "stale",
         });
+        continue;
       }
+    }
+
+    // Stop loss
+    if (plPct <= -ctx.config.stop_loss_pct) {
+      exits.push({
+        symbol: pos.symbol,
+        reason: `Stop loss at ${plPct.toFixed(1)}%`,
+        kind: "stop_loss",
+      });
     }
   }
 

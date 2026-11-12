@@ -305,4 +305,46 @@ describe("Alpaca Market Data Provider", () => {
       expect(snapshots.GOOGL!.latest_trade.price).toBe(140.0);
     });
   });
+
+  describe("getNews", () => {
+    it("asks for the newest headlines for the given stocks", async () => {
+      mockClient.dataRequest.mockResolvedValueOnce({
+        news: [
+          {
+            id: 7,
+            headline: "Chief executive resigns",
+            source: "wire",
+            created_at: "2026-11-12T14:21:00Z",
+            symbols: ["TEST"],
+          },
+          { id: 8, source: "wire", created_at: "2026-11-12T14:00:00Z" },
+        ],
+      });
+
+      const news = await provider.getNews(["TEST", "OTHER"], { start: "2026-11-10T00:00:00Z", limit: 20 });
+
+      expect(mockClient.dataRequest).toHaveBeenCalledWith("GET", "/v1beta1/news", {
+        symbols: "TEST,OTHER",
+        start: "2026-11-10T00:00:00Z",
+        limit: 20,
+        sort: "desc",
+      });
+      expect(news).toEqual([
+        {
+          id: "7",
+          headline: "Chief executive resigns",
+          source: "wire",
+          created_at: "2026-11-12T14:21:00Z",
+          symbols: ["TEST"],
+        },
+      ]);
+    });
+
+    it("returns nothing without asking when no stocks are given, and when the feed is empty", async () => {
+      expect(await provider.getNews([])).toEqual([]);
+      expect(mockClient.dataRequest).not.toHaveBeenCalled();
+      mockClient.dataRequest.mockResolvedValueOnce({});
+      expect(await provider.getNews(["TEST"])).toEqual([]);
+    });
+  });
 });

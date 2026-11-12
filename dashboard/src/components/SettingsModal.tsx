@@ -175,7 +175,7 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                 />
               </div>
               <div>
-                <label className="hud-label block mb-1">Stop Loss (%)</label>
+                <label className="hud-label block mb-1">Stop Loss: Review At (%)</label>
                 <input
                   type="number"
                   className="hud-input w-full"
@@ -183,7 +183,29 @@ export function SettingsModal({ config, onSave, onClose }: SettingsModalProps) {
                   onChange={(e) => handleChange("stop_loss_pct", Number(e.target.value))}
                 />
               </div>
+              <div>
+                <label className="hud-label block mb-1">Stop Loss: Always Sell At (%)</label>
+                <input
+                  type="number"
+                  className="hud-input w-full"
+                  value={localConfig.hard_stop_loss_pct ?? 15}
+                  onChange={(e) => handleChange("hard_stop_loss_pct", Number(e.target.value))}
+                />
+              </div>
+              <div>
+                <label className="hud-label block mb-1">No Sales After Open (min)</label>
+                <input
+                  type="number"
+                  className="hud-input w-full"
+                  value={localConfig.open_sell_delay_minutes ?? 30}
+                  onChange={(e) => handleChange("open_sell_delay_minutes", Number(e.target.value))}
+                />
+              </div>
             </div>
+            <p className="text-[0.6875rem] text-hud-text-dim mt-2">
+              Between the two stop-loss levels the analyst model reads the news and decides whether to sell. At the
+              second level the position is always sold.
+            </p>
           </div>
 
           {/* Timing */}

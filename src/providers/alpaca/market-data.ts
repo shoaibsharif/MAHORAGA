@@ -1,4 +1,4 @@
-import type { Bar, BarsParams, MarketDataProvider, Quote, Snapshot } from "../types";
+import type { Bar, BarsParams, MarketDataProvider, NewsItem, Quote, Snapshot } from "../types";
 import type { AlpacaClient } from "./client";
 
 interface AlpacaBarsResponse {
@@ -200,6 +200,28 @@ export class AlpacaMarketDataProvider implements MarketDataProvider {
       throw new Error(`No crypto snapshot data for ${symbol}`);
     }
     return parseSnapshot(symbol, snapshot);
+  }
+
+  /** Latest headlines mentioning any of these stocks, newest first. */
+  async getNews(symbols: string[], params?: { start?: string; limit?: number }): Promise<NewsItem[]> {
+    if (symbols.length === 0) return [];
+    const response = await this.client.dataRequest<{
+      news?: Array<{ id?: number; headline?: string; source?: string; created_at?: string; symbols?: string[] }>;
+    }>("GET", "/v1beta1/news", {
+      symbols: symbols.join(","),
+      start: params?.start,
+      limit: params?.limit,
+      sort: "desc",
+    });
+    return (response?.news ?? [])
+      .filter((item) => item.headline && item.created_at)
+      .map((item) => ({
+        id: String(item.id ?? ""),
+        headline: String(item.headline),
+        source: item.source ?? "",
+        created_at: String(item.created_at),
+        symbols: item.symbols ?? [],
+      }));
   }
 
   async getSnapshots(symbols: string[]): Promise<Record<string, Snapshot>> {

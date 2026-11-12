@@ -61,6 +61,8 @@ export interface Config {
   min_analyst_confidence: number;
   take_profit_pct: number;
   stop_loss_pct: number;
+  hard_stop_loss_pct?: number;
+  open_sell_delay_minutes?: number;
   position_size_pct_of_cash: number;
   llm_provider?: "openai-raw" | "ai-sdk" | "cloudflare-gateway";
   llm_model: string;
@@ -145,6 +147,14 @@ export interface PositionResearch {
   timestamp: number;
 }
 
+/** The analyst model's decision on a holding that has fallen past the stop loss. */
+export interface StopLossReview {
+  decision: "SELL" | "HOLD";
+  reasoning: string;
+  plPct: number;
+  timestamp: number;
+}
+
 export interface PositionEntry {
   symbol: string;
   entry_time: number;
@@ -186,13 +196,10 @@ export interface PremarketPlan {
 }
 
 export interface StalenessAnalysis {
-  symbol: string;
-  score: number;
-  holdDays: number;
-  gainPct: number;
-  socialVolumeDecay: number;
-  shouldExit: boolean;
-  reasons: string[];
+  isStale: boolean;
+  reason: string;
+  /** 0 to 100; the position is sold as stale at 70. */
+  staleness_score: number;
 }
 
 export interface OvernightActivity {
@@ -241,6 +248,7 @@ export interface Status {
   lastResearchRun: number;
   signalResearch: Record<string, SignalResearch>;
   positionResearch: Record<string, PositionResearch>;
+  stopLossReviews?: Record<string, StopLossReview>;
   portfolioHistory?: PortfolioSnapshot[];
   positionHistory?: Record<string, PositionHistory>;
   positionEntries?: Record<string, PositionEntry>;
